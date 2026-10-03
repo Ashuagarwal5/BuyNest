@@ -56,6 +56,8 @@ export default async function setup() {
   // Set before the test workers start, so the app under test connects to this database.
   process.env['DATABASE_URL'] = `postgresql://postgres:postgres@localhost:${port}/${DATABASE}`;
   process.env['NODE_ENV'] = 'test';
+  // One allowed admin origin, so tests can check that other origins are refused.
+  process.env['CORS_ORIGINS'] = 'http://localhost:3000';
 
   execSync('npx prisma migrate deploy', {
     cwd: path.resolve(import.meta.dirname, '..'),

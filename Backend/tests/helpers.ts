@@ -1,16 +1,21 @@
 import { randomUUID } from 'node:crypto';
 
+import request from 'supertest';
+import { expect } from 'vitest';
+
 import { createApp } from '../src/app.js';
 import { prisma } from '../src/lib/prisma.js';
+import { hashPassword } from '../src/modules/admin/auth/password.js';
 
 export { prisma };
 
-export const app = createApp();
+/** The login rate limit is raised so the many sign-ins in these tests cannot lock each other out. */
+export const app = createApp({ loginRateLimit: { limit: 10_000, windowMs: 60_000 } });
 
 export async function resetDatabase(): Promise<void> {
   await prisma.$executeRaw`
-    TRUNCATE "InventoryTransaction", "OrderStatusHistory", "OrderItem", "Order", "OrderCounter",
-             "Customer", "ProductImage", "Product", "Category", "DeliveryArea"
+    TRUNCATE "InventoryTransaction", "OrderStatusHistory", "PaymentStatusHistory", "OrderItem", "Order", "OrderCounter",
+             "Customer", "ProductImage", "Product", "Category", "DeliveryArea", "AdminSession", "AdminUser"
     CASCADE
   `;
 }
@@ -114,4 +119,64 @@ export async function getStock(productId: string) {
     where: { id: productId },
     select: { stockQuantity: true, reservedQuantity: true },
   });
+}
+
+/** Not a real credential: it exists only inside the throwaway test database. */
+export const TEST_PASSWORD = 'test-only-password-1';
+export const TEST_ADMIN_EMAIL = 'admin@example.test';
+
+export async function createTestAdmin(
+  overrides: { email?: string; name?: string; isActive?: boolean; role?: 'ADMIN' | 'SUPER_ADMIN' } = {}
+) {
+  return prisma.adminUser.create({
+    data: {
+      name: 'Test Admin',
+      email: TEST_ADMIN_EMAIL,
+      // Cheap scrypt settings keep the suite fast; verification reads them from the hash.
+      passwordHash: await hashPassword(TEST_PASSWORD, { N: 2 ** 12, r: 8, p: 1 }),
+      ...overrides,
+    },
+  });
+}
+
+/** A supertest agent that has signed in and carries the admin session cookie. */
+export async function signIn(email: string = TEST_ADMIN_EMAIL) {
+  const agent = request.agent(app);
+  const response = await agent
+    .post('/api/v1/admin/auth/login')
+    .send({ email, password: TEST_PASSWORD });
+  expect(response.status).toBe(200);
+  return agent;
+}
+
+export type AdminAgent = Awaited<ReturnType<typeof signIn>>;
+
+/** Places an order through the public API, as the mobile app would. */
+export async function placeTestOrder(
+  fixtures: Fixtures,
+  items: { productId: string; quantity: number }[],
+  options: { deliveryAreaId?: string; mobile?: string } = {}
+) {
+  const response = await request(app)
+    .post('/api/v1/orders')
+    .send(
+      orderPayload({
+        deliveryAreaId: options.deliveryAreaId ?? fixtures.areas.standard.id,
+        items,
+        mobile: options.mobile,
+      })
+    );
+  expect(response.status).toBe(201);
+  const order = await prisma.order.findUniqueOrThrow({
+    where: { orderNumber: response.body.data.orderNumber },
+  });
+  return { ...response.body.data, id: order.id } as { id: string; orderNumber: string; trackingToken: string; grandTotalPaise: number };
+}
+
+/** Moves an order through admin statuses in order, failing the test if any step is refused. */
+export async function advance(agent: AdminAgent, orderId: string, statuses: string[]) {
+  for (const status of statuses) {
+    const response = await agent.patch(`/api/v1/admin/orders/${orderId}/status`).send({ status });
+    expect(response.status, `moving to ${status}`).toBe(200);
+  }
 }

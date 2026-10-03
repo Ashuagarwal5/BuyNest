@@ -31,6 +31,12 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// Roles are a plain enum so more can be added later without reworking authorization.
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+}
+
 enum InventoryTransactionType {
   RESERVE
   RELEASE
@@ -55,23 +61,23 @@ model Category {
 }
 
 model Product {
-  id                String  @id @default(cuid())
+  id                String   @id @default(cuid())
   name              String
-  slug              String  @unique
+  slug              String   @unique
   description       String
   categoryId        String
-  sku               String  @unique
+  sku               String   @unique
   mrpPaise          Int
   sellingPricePaise Int
   // Physical units on hand. Only reduced when an order is delivered (SALE).
-  stockQuantity     Int     @default(0)
+  stockQuantity     Int      @default(0)
   // Units held by placed-but-undelivered orders. Available = stockQuantity - reservedQuantity.
   // The migration adds CHECK constraints keeping 0 <= reservedQuantity <= stockQuantity.
-  reservedQuantity  Int     @default(0)
-  lowStockThreshold Int     @default(5)
-  isActive          Boolean @default(true)
-  isFeatured        Boolean @default(false)
-  isNew             Boolean @default(false)
+  reservedQuantity  Int      @default(0)
+  lowStockThreshold Int      @default(5)
+  isActive          Boolean  @default(true)
+  isFeatured        Boolean  @default(false)
+  isNew             Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -124,17 +130,17 @@ model DeliveryArea {
 }
 
 model Order {
-  id              String @id @default(cuid())
-  orderNumber     String @unique
+  id                 String  @id @default(cuid())
+  orderNumber        String  @unique
   // Supplied by the client; a retry with the same value returns this order instead of creating another.
-  clientRequestId String @unique
+  clientRequestId    String  @unique
   // SHA-256 of the canonical order intent (see orders/fingerprint.ts). A repeat of
   // clientRequestId is only accepted when its fingerprint matches, so one id can never
   // stand for two different purchases. Null only for orders created before this existed.
   requestFingerprint String?
   // Opaque secret returned once to the customer; required to read or cancel the order.
-  trackingToken   String
-  customerId      String
+  trackingToken      String
+  customerId         String
 
   // Snapshots taken at order time. Never re-read these from Customer / DeliveryArea.
   customerName  String
@@ -157,18 +163,26 @@ model Order {
   paymentStatus PaymentStatus @default(PENDING)
   orderStatus   OrderStatus   @default(PLACED)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  cancelledAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  cancelledAt        DateTime?
+  // Set when an admin marks the order DELIVERED. Revenue and "delivered today" use this.
+  deliveredAt        DateTime?
+  // Set when an admin records the cash as collected. "Cash collected today" uses this.
+  paymentCollectedAt DateTime?
 
   customer              Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
   deliveryArea          DeliveryArea           @relation(fields: [deliveryAreaId], references: [id], onDelete: Restrict)
   items                 OrderItem[]
   statusHistory         OrderStatusHistory[]
+  paymentHistory        PaymentStatusHistory[]
   inventoryTransactions InventoryTransaction[]
 
   @@index([customerId])
   @@index([orderStatus, createdAt])
+  @@index([createdAt])
+  @@index([deliveredAt])
+  @@index([paymentCollectedAt])
 }
 
 // Historical snapshot: name, SKU, image and price as they were when the order was placed.
@@ -192,29 +206,51 @@ model OrderItem {
 }
 
 model OrderStatusHistory {
-  id        String      @id @default(cuid())
-  orderId   String
-  status    OrderStatus
-  note      String?
-  createdAt DateTime    @default(now())
+  id          String      @id @default(cuid())
+  orderId     String
+  status      OrderStatus
+  note        String?
+  // The admin who made the change; null for changes made by the customer or on placing.
+  adminUserId String?
+  createdAt   DateTime    @default(now())
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  adminUser AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
 
   @@index([orderId, createdAt])
 }
 
-// Audit trail of every stock movement. `quantity` is always positive; `type` gives the direction.
-model InventoryTransaction {
-  id        String                   @id @default(cuid())
-  productId String
-  orderId   String?
-  type      InventoryTransactionType
-  quantity  Int
-  note      String?
-  createdAt DateTime                 @default(now())
+// Audit trail of payment status changes, kept apart from order status on purpose.
+model PaymentStatusHistory {
+  id          String        @id @default(cuid())
+  orderId     String
+  fromStatus  PaymentStatus
+  toStatus    PaymentStatus
+  note        String?
+  adminUserId String?
+  createdAt   DateTime      @default(now())
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  adminUser AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+}
+
+// Audit trail of every stock movement. For RESERVE, RELEASE and SALE `quantity` is positive and`n// `type` gives the direction. For ADJUSTMENT it is signed: positive adds stock, negative removes it.
+model InventoryTransaction {
+  id          String                   @id @default(cuid())
+  productId   String
+  orderId     String?
+  type        InventoryTransactionType
+  quantity    Int
+  note        String?
+  // The admin who made a manual adjustment or moved an order; null for customer actions.
+  adminUserId String?
+  createdAt   DateTime                 @default(now())
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  order     Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  adminUser AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
   @@index([orderId])
@@ -224,4 +260,39 @@ model InventoryTransaction {
 model OrderCounter {
   day          String @id
   lastSequence Int
+}
+
+// Shop staff who can sign in to the admin panel. Email is stored lower-cased.
+model AdminUser {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  // scrypt hash with its own salt and cost parameters. Never returned by any API.
+  passwordHash String
+  role         AdminRole @default(ADMIN)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions              AdminSession[]
+  orderStatusHistory    OrderStatusHistory[]
+  paymentStatusHistory  PaymentStatusHistory[]
+  inventoryTransactions InventoryTransaction[]
+}
+
+// A signed-in admin browser. The cookie holds a random token; only its SHA-256 is stored
+// here, so a leaked database cannot be used to sign in. Deleting the row signs that browser out.
+model AdminSession {
+  id          String   @id @default(cuid())
+  adminUserId String
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  lastUsedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([expiresAt])
 }

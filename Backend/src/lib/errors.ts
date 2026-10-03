@@ -15,6 +15,20 @@ export type ErrorCode =
   | 'INVALID_TRACKING_TOKEN'
   | 'ORDER_CANNOT_BE_CANCELLED'
   | 'IDEMPOTENCY_CONFLICT'
+  | 'UNAUTHENTICATED'
+  | 'INVALID_CREDENTIALS'
+  | 'FORBIDDEN'
+  | 'ORIGIN_NOT_ALLOWED'
+  | 'TOO_MANY_REQUESTS'
+  | 'INVALID_ORDER_TRANSITION'
+  | 'PAYMENT_NOT_ALLOWED'
+  | 'INVALID_PAYMENT_TRANSITION'
+  | 'INVENTORY_MISMATCH'
+  | 'ADJUSTMENT_BELOW_RESERVED'
+  | 'CUSTOMER_NOT_FOUND'
+  | 'DUPLICATE_SKU'
+  | 'DUPLICATE_SLUG'
+  | 'DUPLICATE_NAME'
   | 'SERVICE_UNAVAILABLE'
   | 'INTERNAL_ERROR';
 
@@ -36,6 +50,14 @@ export class AppError extends Error {
 }
 
 export const notFound = (code: ErrorCode, message: string) => new AppError(404, code, message);
+
+/** No valid sign-in. The client should send the user to the login screen. */
+export const unauthenticated = (message = 'Please sign in to continue.') =>
+  new AppError(401, 'UNAUTHENTICATED', message);
+
+/** Signed in, but this account may not do this. */
+export const forbidden = (message = 'You do not have permission to do this.') =>
+  new AppError(403, 'FORBIDDEN', message);
 
 /** The request is valid but conflicts with current state (stock, order status...). */
 export const conflict = (code: ErrorCode, message: string, details?: unknown) =>

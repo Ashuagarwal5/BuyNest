@@ -7,6 +7,13 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   CORS_ORIGINS: z.string().default(''),
+  /** How long an admin stays signed in. There is no sliding extension: after this, sign in again. */
+  ADMIN_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(12),
+  /**
+   * How many reverse proxies sit in front of the API (0 when none). Needed so the login
+   * rate limit sees each visitor's address rather than the proxy's.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -27,4 +34,6 @@ export const env = {
   corsOrigins: parsed.data.CORS_ORIGINS.split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  adminSessionTtlMs: parsed.data.ADMIN_SESSION_TTL_HOURS * 60 * 60 * 1000,
+  trustProxyHops: parsed.data.TRUST_PROXY_HOPS,
 };

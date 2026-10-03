@@ -67,7 +67,10 @@ up for development. It is safe to re-run and never resets stock.
 | `DATABASE_URL` | yes      | PostgreSQL connection string                                                 |
 | `PORT`         | no       | API port, default `4000`                                                     |
 | `NODE_ENV`     | no       | `development` (default), `test` or `production`                              |
-| `CORS_ORIGINS` | no       | Comma-separated browser origins. Empty allows all in development, none in production |
+| `CORS_ORIGINS` | no       | Comma-separated browser origins (the admin panel's address). Empty allows all in development, none in production |
+| `ADMIN_SESSION_TTL_HOURS` | no | How long an admin stays signed in, default `12` |
+| `TRUST_PROXY_HOPS` | no | Reverse proxies in front of the API, default `0` |
+| `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD` / `ADMIN_SEED_NAME` | for `admin:create` | The first admin account. No defaults; see Admin setup |
 
 `.env` is ignored by Git. Never commit real credentials.
 
@@ -86,6 +89,7 @@ up for development. It is safe to re-run and never resets stock.
 | `npm run prisma:migrate`  | Create and apply a migration after a schema change       |
 | `npm run prisma:deploy`   | Apply existing migrations                                |
 | `npm run prisma:seed`     | Load development data                                    |
+| `npm run admin:create`    | Create the first admin from `ADMIN_SEED_*` (add `--reset-password` to replace a password) |
 | `npm run db:reset-dev -- --yes` | DEV ONLY: delete all orders and customers, release reserved stock |
 
 `db:reset-dev` keeps the catalogue and delivery areas. It refuses to run if `NODE_ENV` is
@@ -110,7 +114,7 @@ Base URL: `http://localhost:4000/api/v1`
 | POST   | `/orders/:orderNumber/cancel`  | Needs the `X-Tracking-Token` header; only while `PLACED`     |
 
 There are no public endpoints that create or change products, stock, order status or
-payment. Those will be authenticated admin APIs.
+payment. Those are the authenticated admin APIs below.
 
 ### Responses
 
@@ -160,6 +164,140 @@ payment. Those will be authenticated admin APIs.
 - The same `clientRequestId` with **different** contents is rejected with `409
   IDEMPOTENCY_CONFLICT`, and the reply reveals nothing about the original order.
 
+## Admin API
+
+Base URL: `http://localhost:4000/api/v1/admin`. Everything here needs a signed-in admin;
+nothing in it is reachable without one (an unknown admin path answers 401, not 404).
+Success and error responses use the same format as the public API.
+
+### Admin setup
+
+There is no default account and no signup. Create the first admin on the machine that has
+the database, with your own details:
+
+```bash
+# PowerShell
+$env:ADMIN_SEED_EMAIL="owner@yourshop.com"; $env:ADMIN_SEED_NAME="Your Name"; $env:ADMIN_SEED_PASSWORD="a long passphrase"; npm run admin:create
+```
+
+Or put the three `ADMIN_SEED_*` values in `.env`, run `npm run admin:create`, then **remove
+`ADMIN_SEED_PASSWORD` from `.env`**. The account is created as `SUPER_ADMIN`. Passwords need
+at least 10 characters. Running the command again for an existing email changes nothing; to
+replace a forgotten password run it with `--reset-password`, which also signs that admin out
+everywhere. The password is never printed or stored in plain text.
+
+### Signing in
+
+The admin panel authenticates with a **server-side session in an HttpOnly cookie**:
+
+1. `POST /auth/login` with `{ "email", "password" }`. On success the response sets the
+   `bn_admin_session` cookie and returns the admin's name, email and role.
+2. The browser then sends that cookie automatically. Call the API with
+   `credentials: 'include'` (fetch) and add the panel's address to `CORS_ORIGINS`.
+3. `GET /auth/me` returns the signed-in admin; `POST /auth/logout` ends the session.
+
+Why this design: the cookie holds a random 256-bit token and the database stores only its
+SHA-256, so a leaked database cannot sign anyone in. Logging out or deactivating an admin
+works on the very next request (a JWT could not be revoked). The cookie is `HttpOnly` (page
+scripts cannot read it, so nothing sensitive sits in `localStorage`), `Secure` in production,
+`SameSite=Lax`, limited to the path `/api/v1/admin`, and expires after
+`ADMIN_SESSION_TTL_HOURS`. Because it is `SameSite=Lax`, the panel and the API must share a
+registrable domain (for example `admin.shop.com` and `api.shop.com`, or `localhost` ports).
+Admin requests that change data are also refused when their `Origin` is not in
+`CORS_ORIGINS`. Login is limited to 10 failed attempts per address per 15 minutes (HTTP 429),
+and a wrong password, an unknown email and an inactive account all get the same answer.
+
+### Endpoints
+
+| Method | Path                                   | Purpose                                              |
+| ------ | -------------------------------------- | ---------------------------------------------------- |
+| POST   | `/auth/login`, `/auth/logout`          | Sign in and out                                      |
+| GET    | `/auth/me`                             | The signed-in admin                                  |
+| GET    | `/dashboard`                           | Metrics, recent orders, low-stock products           |
+| GET    | `/orders`                              | `status`, `paymentStatus`, `search`, `from`, `to`, `page`, `limit` |
+| GET    | `/orders/:id`                          | Full order, history, and what it may do next         |
+| PATCH  | `/orders/:id/status`                   | `{ status, note? }`                                  |
+| PATCH  | `/orders/:id/payment`                  | `{ paymentStatus: "COLLECTED", note? }`              |
+| GET    | `/products`                            | `search` (name/SKU), `categoryId`, `isActive`, `lowStock`, paging |
+| POST   | `/products`                            | Create (with opening stock and images)               |
+| GET/PATCH | `/products/:id`                     | Read / edit details (not stock)                      |
+| POST   | `/products/:id/inventory-adjustment`   | `{ quantityDelta, note }`: the only way to change stock |
+| GET/POST | `/categories`                        | List all / create                                    |
+| PATCH  | `/categories/:id`                      | Edit or deactivate                                   |
+| GET/POST | `/delivery-areas`                    | List all / create                                    |
+| PATCH  | `/delivery-areas/:id`                  | Edit or deactivate                                   |
+| GET    | `/customers`, `/customers/:id`         | `search` (name/mobile), paging; order count, value, last order |
+
+Lists are paginated (`page`, default 1; `limit`, default 25, **maximum 100**) and return
+`{ items, pagination: { page, limit, total, totalPages } }`. Order `from` / `to` are shop
+days as `YYYY-MM-DD`, both inclusive. Money is integer paise everywhere. Nothing is ever
+deleted through the API: products, categories and delivery areas are deactivated with
+`isActive: false`. Admin responses never contain tracking tokens.
+
+### Order status rules
+
+The server enforces these; the panel should offer only `allowedNextStatuses` from the order.
+
+| From               | Can move to                    |
+| ------------------ | ------------------------------ |
+| `PLACED`           | `CONFIRMED`, `CANCELLED`       |
+| `CONFIRMED`        | `PACKED`, `CANCELLED`          |
+| `PACKED`           | `OUT_FOR_DELIVERY`, `CANCELLED` |
+| `OUT_FOR_DELIVERY` | `DELIVERED`, `DELIVERY_FAILED` |
+| `DELIVERY_FAILED`  | `OUT_FOR_DELIVERY`, `CANCELLED` |
+| `DELIVERED`, `CANCELLED` | nothing (final)          |
+
+An invalid move is `409 INVALID_ORDER_TRANSITION` and changes nothing. A packed order can
+still be cancelled because nothing irreversible has happened: stock is only reserved and no
+cash has been taken. Once an order is out for delivery the goods are on the road, so it can
+only be delivered or marked failed. A failed delivery keeps its stock reserved (it may go out
+again) until it is cancelled. Every change writes an `OrderStatusHistory` entry with the
+admin and an optional note, in the same transaction as the change itself. The customer
+sees the new status in the mobile app by refreshing.
+
+### Inventory
+
+`availableQuantity = stockQuantity - reservedQuantity` (calculated, never stored).
+
+| Event                       | `stockQuantity` | `reservedQuantity` | Recorded as   |
+| --------------------------- | --------------- | ------------------ | ------------- |
+| Customer places an order    | unchanged       | + ordered          | `RESERVE`     |
+| Order cancelled (by anyone) | unchanged       | - ordered          | `RELEASE`     |
+| Admin marks `DELIVERED`     | - ordered       | - ordered          | `SALE`        |
+| Admin adjustment            | + signed amount | unchanged          | `ADJUSTMENT`  |
+
+Delivery and cancellation each run in one transaction and are guarded by the order's
+current status inside the `UPDATE` itself, so a repeated or simultaneous request cannot sell
+or release stock twice (the second gets `409`). Stock never goes below zero or below what is
+reserved: an adjustment that would is refused with `409 ADJUSTMENT_BELOW_RESERVED`. Every
+adjustment needs a note and is stored with the admin and a signed quantity.
+
+### Cash on delivery
+
+`DELIVERED` does not mean paid. Record cash with `PATCH /orders/:id/payment`; only
+`PENDING -> COLLECTED` exists. It is allowed once the order is `OUT_FOR_DELIVERY` or
+`DELIVERED` (`422 PAYMENT_NOT_ALLOWED` before that), and a second attempt is
+`409 INVALID_PAYMENT_TRANSITION`. Each change is stored in `PaymentStatusHistory` with the
+admin. Because refunds are not built, an order whose cash was collected cannot then be
+cancelled or marked failed.
+
+### Dashboard figures
+
+"Today" is the shop's calendar day in India (IST); timestamps are stored in UTC.
+
+| Field                     | Meaning                                                              |
+| ------------------------- | -------------------------------------------------------------------- |
+| `todayOrders`             | Orders placed today, whatever became of them                         |
+| `pendingOrders`           | Orders still needing action: `PLACED`, `CONFIRMED` or `PACKED`       |
+| `outForDeliveryOrders`    | Orders currently out for delivery                                    |
+| `deliveredToday`          | Orders marked delivered today                                        |
+| `todayRevenuePaise`       | Grand total of orders delivered today, paid or not                   |
+| `cashCollectedTodayPaise` | Grand total of orders whose payment was marked collected today       |
+| `cashPendingPaise`        | Cash owed on delivered orders still `PENDING` (`deliveredUnpaidOrders` is their count) |
+| `lowStockCount`           | Active products whose available stock is at or below their threshold |
+
+Revenue is recognised on delivery and cash collected comes only from payment records, so
+the two are never inferred from each other.
 ## How the important rules are enforced
 
 **Stock is reserved, not sold, at order time.** `available = stockQuantity - reservedQuantity`.
@@ -206,12 +344,12 @@ in a header so it stays out of URLs and logs.
 
 ```
 prisma/        schema, migrations, seed
-scripts/       bundled dev database
+scripts/       bundled dev database, create-admin, dev data reset
 src/
   config/      environment parsing
   lib/         prisma client, errors, pricing, mobile number
   middleware/  error handling, request log
-  modules/     catalog, orders, health (routes, schemas, services)
+  modules/     catalog, orders, health, admin (auth, orders, products, ...)
   app.ts       Express app
   server.ts    entry point
 tests/         API tests against a real PostgreSQL

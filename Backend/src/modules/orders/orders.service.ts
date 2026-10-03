@@ -3,6 +3,7 @@ import { AppError, conflict, notFound, unprocessable } from '../../lib/errors.js
 import { calculateLineTotal, calculateOrderTotals } from '../../lib/pricing.js';
 import { prisma, type TransactionClient } from '../../lib/prisma.js';
 import { createRequestFingerprint } from './fingerprint.js';
+import { addStatusHistory, claimStatusChange, releaseReservations } from './order-lifecycle.js';
 import { generateTrackingToken, issueOrderNumber, isSameToken } from './order-number.js';
 import type { CreateOrderInput } from './orders.schemas.js';
 
@@ -319,49 +320,21 @@ export async function cancelOrder(orderNumber: string, trackingToken: string): P
   const cancelled = await prisma.$transaction(async (tx) => {
     // The status check is part of the UPDATE itself, so two simultaneous cancellations
     // (or a cancel racing a confirm) cannot both succeed and release the stock twice.
-    const { count } = await tx.order.updateMany({
-      where: { id: order.id, orderStatus: 'PLACED' },
-      data: { orderStatus: 'CANCELLED', cancelledAt: new Date() },
-    });
-    if (count === 0) {
-      const current = await tx.order.findUniqueOrThrow({
-        where: { id: order.id },
-        select: { orderStatus: true },
-      });
-      throw conflict(
-        'ORDER_CANNOT_BE_CANCELLED',
-        'This order can no longer be cancelled.',
-        { orderStatus: current.orderStatus }
-      );
-    }
-
-    const items = [...order.items].sort((a, b) => a.productId.localeCompare(b.productId));
-    for (const item of items) {
-      const releasedRows = await tx.$executeRaw`
-        UPDATE "Product"
-        SET "reservedQuantity" = "reservedQuantity" - ${item.quantity}::int, "updatedAt" = NOW()
-        WHERE "id" = ${item.productId} AND "reservedQuantity" >= ${item.quantity}::int
-      `;
-      if (releasedRows !== 1) {
-        throw new Error(`Reservation for product ${item.productId} could not be released`);
-      }
-    }
-
-    await tx.inventoryTransaction.createMany({
-      data: items.map((item) => ({
-        productId: item.productId,
-        orderId: order.id,
-        type: 'RELEASE' as const,
-        quantity: item.quantity,
-      })),
+    await claimStatusChange(tx, {
+      orderId: order.id,
+      allowedFrom: ['PLACED'],
+      to: 'CANCELLED',
+      extras: { cancelledAt: new Date() },
+      reject: (current) =>
+        conflict('ORDER_CANNOT_BE_CANCELLED', 'This order can no longer be cancelled.', {
+          orderStatus: current?.orderStatus,
+        }),
     });
 
-    await tx.orderStatusHistory.create({
-      data: { orderId: order.id, status: 'CANCELLED', note: 'Cancelled by customer' },
-    });
+    await releaseReservations(tx, order.id, order.items);
+    await addStatusHistory(tx, order.id, 'CANCELLED', 'Cancelled by customer');
 
     return tx.order.findUniqueOrThrow({ where: { id: order.id }, include: orderInclude });
   });
-
   return toPublicOrder(cancelled);
 }
