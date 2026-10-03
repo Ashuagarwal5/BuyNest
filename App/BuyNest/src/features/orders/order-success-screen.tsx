@@ -1,0 +1,132 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+
+import { AppText } from '@/components/ui/app-text';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Icon } from '@/components/ui/icon';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { Screen } from '@/components/ui/screen';
+import { SectionCard } from '@/components/ui/section-card';
+import { Radius, Spacing } from '@/constants/theme';
+import { OrderAddress } from '@/features/orders/components/order-address';
+import { OrderStatusBadge } from '@/features/orders/components/status-badges';
+import { useOrders } from '@/features/orders/order-context';
+import { PAYMENT_METHOD_DISPLAY } from '@/features/orders/order-status';
+import { useTheme } from '@/hooks/use-theme';
+import { formatCurrency } from '@/utils/money';
+
+const SCREEN_EDGES = ['left', 'right', 'bottom'] as const;
+
+export function OrderSuccessScreen() {
+  const theme = useTheme();
+  const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { getOrderById, status } = useOrders();
+  const order = getOrderById(id);
+
+  const goHome = () => router.dismissTo('/');
+
+  if (!order) {
+    return (
+      <Screen edges={SCREEN_EDGES} style={status === 'loading' ? styles.centered : undefined}>
+        {status === 'loading' ? (
+          <ActivityIndicator color={theme.primary} />
+        ) : (
+          <EmptyState
+            icon="orders"
+            title="Order not found"
+            message="We could not find this order on this device."
+            actionLabel="Continue Shopping"
+            onAction={goHome}
+          />
+        )}
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen edges={SCREEN_EDGES}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.hero}>
+          <View style={[styles.heroIcon, { backgroundColor: theme.primarySoft }]}>
+            <Icon name="success" size={48} color="primary" />
+          </View>
+          <AppText variant="title" style={styles.centerText}>
+            Order Placed Successfully
+          </AppText>
+          <AppText color="textSecondary" style={styles.centerText}>
+            Thank you, {order.customerName}. We will confirm your order shortly.
+          </AppText>
+        </View>
+
+        <SectionCard title="Order Summary">
+          <View style={styles.row}>
+            <AppText color="textSecondary">Order Number</AppText>
+            <AppText variant="bodyStrong">{order.orderNumber}</AppText>
+          </View>
+          <View style={styles.row}>
+            <AppText color="textSecondary">Amount</AppText>
+            <AppText variant="bodyStrong">{formatCurrency(order.grandTotal)}</AppText>
+          </View>
+          <View style={styles.row}>
+            <AppText color="textSecondary">Payment</AppText>
+            <AppText>{PAYMENT_METHOD_DISPLAY[order.paymentMethod].label}</AppText>
+          </View>
+          <View style={styles.row}>
+            <AppText color="textSecondary">Status</AppText>
+            <OrderStatusBadge status={order.orderStatus} />
+          </View>
+        </SectionCard>
+
+        <SectionCard title="Delivering To">
+          <OrderAddress address={order.deliveryAddress} />
+        </SectionCard>
+
+        <View style={styles.actions}>
+          {/* replace: Back from the order should not land on this confirmation again. */}
+          <PrimaryButton
+            title="View Order"
+            onPress={() => router.replace({ pathname: '/orders/[id]', params: { id: order.id } })}
+          />
+          <PrimaryButton title="Continue Shopping" variant="secondary" onPress={goHome} />
+        </View>
+      </ScrollView>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  hero: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.four,
+  },
+  heroIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.two,
+  },
+  centerText: {
+    textAlign: 'center',
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  actions: {
+    gap: Spacing.three,
+  },
+});
