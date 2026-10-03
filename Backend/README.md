@@ -86,6 +86,10 @@ up for development. It is safe to re-run and never resets stock.
 | `npm run prisma:migrate`  | Create and apply a migration after a schema change       |
 | `npm run prisma:deploy`   | Apply existing migrations                                |
 | `npm run prisma:seed`     | Load development data                                    |
+| `npm run db:reset-dev -- --yes` | DEV ONLY: delete all orders and customers, release reserved stock |
+
+`db:reset-dev` keeps the catalogue and delivery areas. It refuses to run if `NODE_ENV` is
+`production` or the database is not on this machine, and does nothing without `--yes`.
 
 Tests start their own throwaway PostgreSQL and apply the real migrations to it, so they need
 nothing running and never touch your development database.
@@ -124,7 +128,7 @@ payment. Those will be authenticated admin APIs.
 | 401    | `INVALID_TRACKING_TOKEN` (header missing)                                |
 | 403    | `INVALID_TRACKING_TOKEN` (wrong token)                                   |
 | 404    | `PRODUCT_NOT_FOUND`, `DELIVERY_AREA_NOT_FOUND`, `ORDER_NOT_FOUND`, `ROUTE_NOT_FOUND` |
-| 409    | `OUT_OF_STOCK`, `PRODUCT_UNAVAILABLE`, `DELIVERY_AREA_UNAVAILABLE`, `ORDER_CANNOT_BE_CANCELLED` |
+| 409    | `OUT_OF_STOCK`, `PRODUCT_UNAVAILABLE`, `DELIVERY_AREA_UNAVAILABLE`, `ORDER_CANNOT_BE_CANCELLED`, `IDEMPOTENCY_CONFLICT` |
 | 422    | `MINIMUM_ORDER_NOT_MET`                                                  |
 | 500    | `INTERNAL_ERROR`                                                         |
 
@@ -150,8 +154,11 @@ payment. Those will be authenticated admin APIs.
 - Unknown fields are rejected, so a client cannot send prices, totals or a delivery charge.
 - `201` returns the order with its `orderNumber` and a `trackingToken`. **The token is only
   returned here**; store it, because reading or cancelling the order requires it.
-- Sending the same `clientRequestId` again returns the original order with `200` and the
-  header `Idempotent-Replayed: true`. It never creates a second order.
+- Sending the same request again (same `clientRequestId` **and** same contents) returns the
+  original order with `200` and the header `Idempotent-Replayed: true`. It never creates a
+  second order. This is how a client recovers when a response is lost: replay the request.
+- The same `clientRequestId` with **different** contents is rejected with `409
+  IDEMPOTENCY_CONFLICT`, and the reply reveals nothing about the original order.
 
 ## How the important rules are enforced
 
@@ -177,6 +184,15 @@ are always locked in id order, which prevents deadlocks between orders sharing p
 **An order is all-or-nothing.** Reservation, customer, order, items, status history, the
 order number and the inventory records are written in one transaction. Any failure rolls
 everything back.
+
+**Idempotency covers the whole request, not just its id.** Each order stores a SHA-256
+fingerprint of what was asked for: customer, address, delivery area, items (in any order)
+and payment method. It is computed from the validated input, so `+91 98765 43210` and
+`9876543210` match, and it excludes everything the server decides. A replay is accepted only
+if its fingerprint matches. That keeps one id from standing for two purchases, and it means
+the full original request acts as the proof needed to get the order (and its tracking token)
+back: knowing only the id is not enough. Orders created before fingerprints existed have none
+and can never be replayed.
 
 **Order numbers** (`BN-YYYYMMDD-NNNN`, date in IST) come from an `OrderCounter` row
 incremented with `INSERT ... ON CONFLICT DO UPDATE`, which is safe across concurrent

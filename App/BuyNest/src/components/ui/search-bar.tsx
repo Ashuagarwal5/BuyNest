@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { Icon } from '@/components/ui/icon';
@@ -7,24 +7,31 @@ import { useTheme } from '@/hooks/use-theme';
 
 type SearchBarProps = {
   placeholder: string;
+  onPress: () => void;
 };
 
 /**
- * Visual search entry point. Search itself is not built yet, so this is intentionally
- * not interactive; it becomes a Pressable/TextInput when the search screen exists.
+ * The search box shown on Home. It looks like an input but is a button that opens the
+ * search screen, where the typing happens, so the keyboard never covers the Home content.
  */
-export function SearchBar({ placeholder }: SearchBarProps) {
+export function SearchBar({ placeholder, onPress }: SearchBarProps) {
   const theme = useTheme();
 
   return (
-    <View
+    <Pressable
+      accessibilityRole="search"
       accessibilityLabel={placeholder}
-      style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.container,
+        { backgroundColor: theme.surface, borderColor: theme.border },
+        pressed && styles.pressed,
+      ]}>
       <Icon name="search" size={22} color="textSecondary" />
       <AppText color="textSecondary" numberOfLines={1} style={styles.placeholder}>
         {placeholder}
       </AppText>
-    </View>
+    </Pressable>
   );
 }
 
@@ -37,6 +44,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.medium,
     borderWidth: 1,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   placeholder: {
     flex: 1,

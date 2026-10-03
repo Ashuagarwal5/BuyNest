@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "db:dev": "tsx scripts/dev-db.ts",
+    "db:reset-dev": "tsx scripts/reset-dev-data.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

@@ -5,22 +5,26 @@ export type Category = {
   description: string;
   imageUrl: string | null;
   displayOrder: number;
-  isActive: boolean;
 };
 
+/**
+ * A product as last received from the server. Money is integer paise (₹199 = 19900).
+ * Prices and stock here are for display; the server recalculates both when an order is placed.
+ */
 export type Product = {
   id: string;
   name: string;
   slug: string;
   description: string;
   categoryId: string;
-  /** Image URLs, first one is the primary image. Empty until real images are uploaded. */
+  categorySlug: string;
+  categoryName: string;
+  /** Image URLs, first one is the primary image. */
   images: string[];
-  /** Money is always integer paise (₹199 = 19900), matching what the backend will store. */
   mrp: number;
   sellingPrice: number;
+  /** Units a customer can order right now (stock minus units held by other orders). */
   stockQuantity: number;
   isFeatured: boolean;
   isNew: boolean;
-  rating: number | null;
 };

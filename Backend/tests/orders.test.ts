@@ -274,6 +274,122 @@ describe('order idempotency', () => {
     expect((await getStock(fixtures.products.notebook.id)).reservedQuantity).toBe(1);
   });
 
+  it('treats an equivalent payload as the same request', async () => {
+    const clientRequestId = 'equivalent-request-0001';
+    const items = [
+      { productId: fixtures.products.notebook.id, quantity: 1 },
+      { productId: fixtures.products.pencil.id, quantity: 2 },
+    ];
+    const first = await placeOrder(
+      orderPayload({ deliveryAreaId: fixtures.areas.standard.id, items, clientRequestId })
+    );
+
+    // Same purchase, written differently: items reordered, mobile in another format.
+    const second = await placeOrder(
+      orderPayload({
+        deliveryAreaId: fixtures.areas.standard.id,
+        items: [...items].reverse(),
+        clientRequestId,
+        mobile: '+91 98765 43210',
+      })
+    );
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(200);
+    expect(second.body.data.orderNumber).toBe(first.body.data.orderNumber);
+    expect(await prisma.order.count()).toBe(1);
+  });
+
+  it('rejects a repeated clientRequestId whose payload is different', async () => {
+    const clientRequestId = 'conflicting-request-0001';
+    const original = orderPayload({
+      deliveryAreaId: fixtures.areas.standard.id,
+      items: [{ productId: fixtures.products.notebook.id, quantity: 1 }],
+      clientRequestId,
+    });
+    const first = await placeOrder(original);
+    expect(first.status).toBe(201);
+    const originalToken: string = first.body.data.trackingToken;
+
+    const variants = {
+      'a larger quantity': {
+        ...original,
+        items: [{ productId: fixtures.products.notebook.id, quantity: 2 }],
+      },
+      'an extra product': {
+        ...original,
+        items: [...original.items, { productId: fixtures.products.pencil.id, quantity: 1 }],
+      },
+      'another delivery area': { ...original, deliveryAreaId: fixtures.areas.withMinimum.id },
+      'another address': { ...original, address: { ...original.address, addressLine1: 'Elsewhere' } },
+      'another name': { ...original, customer: { ...original.customer, fullName: 'Someone Else' } },
+      'another mobile': { ...original, customer: { ...original.customer, mobile: '9123456780' } },
+    };
+
+    for (const [label, body] of Object.entries(variants)) {
+      const response = await placeOrder(body);
+
+      expect(response.status, label).toBe(409);
+      expect(response.body.error.code, label).toBe('IDEMPOTENCY_CONFLICT');
+      // The conflicting caller learns nothing about the original order.
+      expect(JSON.stringify(response.body), label).not.toContain(originalToken);
+      expect(JSON.stringify(response.body), label).not.toContain(first.body.data.orderNumber);
+    }
+
+    // Still exactly the first order and its reservation.
+    expect(await prisma.order.count()).toBe(1);
+    expect((await getStock(fixtures.products.notebook.id)).reservedQuantity).toBe(1);
+    expect((await getStock(fixtures.products.pencil.id)).reservedQuantity).toBe(0);
+  });
+
+  it('creates separate orders for different request ids with the same contents', async () => {
+    const first = await placeOrder(simpleOrder({ clientRequestId: 'separate-request-0001' }));
+    const second = await placeOrder(simpleOrder({ clientRequestId: 'separate-request-0002' }));
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.data.orderNumber).not.toBe(first.body.data.orderNumber);
+    expect(await prisma.order.count()).toBe(2);
+    expect((await getStock(fixtures.products.notebook.id)).reservedQuantity).toBe(2);
+  });
+
+  it('cannot confirm a replay of an order that has no stored fingerprint', async () => {
+    const body = simpleOrder({ clientRequestId: 'legacy-request-0001' });
+    const first = await placeOrder(body);
+    await prisma.order.update({
+      where: { orderNumber: first.body.data.orderNumber },
+      data: { requestFingerprint: null },
+    });
+
+    const replay = await placeOrder(body);
+
+    expect(replay.status).toBe(409);
+    expect(replay.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(JSON.stringify(replay.body)).not.toContain(first.body.data.trackingToken);
+  });
+
+  it('lets only one of two conflicting requests with the same id create an order', async () => {
+    const clientRequestId = 'racing-request-0001';
+    const make = (quantity: number) =>
+      orderPayload({
+        deliveryAreaId: fixtures.areas.standard.id,
+        items: [{ productId: fixtures.products.notebook.id, quantity }],
+        clientRequestId,
+      });
+
+    const responses = await Promise.all([placeOrder(make(1)), placeOrder(make(2))]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+    expect(responses.find((response) => response.status === 409)?.body.error.code).toBe(
+      'IDEMPOTENCY_CONFLICT'
+    );
+    expect(await prisma.order.count()).toBe(1);
+    const created = responses.find((response) => response.status === 201)?.body.data;
+    expect((await getStock(fixtures.products.notebook.id)).reservedQuantity).toBe(
+      created.items[0].quantity
+    );
+  });
+
   it('creates one order when the same request arrives several times at once', async () => {
     const body = orderPayload({
       deliveryAreaId: fixtures.areas.standard.id,

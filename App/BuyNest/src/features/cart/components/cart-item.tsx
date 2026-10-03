@@ -29,6 +29,11 @@ export function CartItem({ line }: CartItemProps) {
         <AppText variant="caption" color="textSecondary">
           {formatCurrency(product.sellingPrice)} each
         </AppText>
+        {line.issue ? (
+          <AppText variant="captionStrong" color="danger">
+            {line.issue}
+          </AppText>
+        ) : null}
         <QuantitySelector
           size="small"
           quantity={quantity}

@@ -31,6 +31,8 @@ const ICONS = {
   info: symbol('info.circle', 'info'),
   store: symbol('bag.fill', 'storefront'),
   success: symbol('checkmark.circle.fill', 'check_circle'),
+  offline: symbol('wifi.slash', 'wifi_off'),
+  close: symbol('xmark.circle.fill', 'cancel'),
   stationery: symbol('pencil', 'edit_note'),
   gift: symbol('gift.fill', 'redeem'),
   toys: symbol('teddybear.fill', 'toys'),

@@ -24,6 +24,14 @@ export const PAYMENT_METHOD_DISPLAY: Record<PaymentMethod, { label: string; desc
     COD: { label: 'Cash on Delivery', description: 'Pay when your order arrives' },
   };
 
+/**
+ * Whether to offer the Cancel button. This is a display hint only: the server decides
+ * whether a cancellation is actually allowed and may still refuse.
+ */
+export function mayBeCancellable(status: OrderStatus): boolean {
+  return status === 'PLACED';
+}
+
 /** The normal path of an order, in sequence, for the timeline. */
 export const ORDER_PROGRESS_STEPS: OrderStatus[] = [
   'PLACED',

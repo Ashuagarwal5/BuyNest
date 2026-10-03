@@ -5,6 +5,7 @@ import { AppText } from '@/components/ui/app-text';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
 import { Radius, Spacing } from '@/constants/theme';
+import { ConnectionCheck } from '@/features/account/components/connection-check';
 import { useTheme } from '@/hooks/use-theme';
 
 type AccountOption = {
@@ -61,6 +62,8 @@ export function AccountScreen() {
             </View>
           ))}
         </View>
+
+        <ConnectionCheck />
       </ScrollView>
     </Screen>
   );

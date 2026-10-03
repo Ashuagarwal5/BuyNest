@@ -4,12 +4,14 @@ import {
   use,
   useEffect,
   useReducer,
+  useRef,
   useState,
 } from 'react';
 
-import { getProductById } from '@/data/products';
 import { cartReducer, getEntryQuantity, initialCartState } from '@/features/cart/cart-reducer';
 import { loadCartEntries, saveCartEntries } from '@/features/cart/cart-storage';
+import { ApiError } from '@/services/api/api-error';
+import { fetchProduct } from '@/services/api/catalog-api';
 import type { Product } from '@/types/catalog';
 import { calculateLineTotal, calculateSubtotal } from '@/utils/pricing';
 
@@ -17,13 +19,18 @@ export type CartLine = {
   product: Product;
   quantity: number;
   lineTotal: number;
+  /** Why this line cannot be ordered as it stands, or null when it is fine. */
+  issue: string | null;
 };
 
 type CartContextValue = {
   lines: CartLine[];
   /** Total units across all lines, used for the tab badge. */
   itemCount: number;
+  /** Estimate from last-known prices; the server calculates the real total. */
   subtotal: number;
+  /** True when at least one line is unavailable or exceeds the stock last reported. */
+  hasIssues: boolean;
   /** False until the saved cart has been read; the cart is usable (and empty) meanwhile. */
   isHydrated: boolean;
   getQuantity: (productId: string) => number;
@@ -32,13 +39,28 @@ type CartContextValue = {
   decrement: (product: Product) => void;
   removeItem: (productId: string) => void;
   clear: () => void;
+  /** Clears the cart only if it still matches an order that was just placed from it. */
+  clearIfMatches: (cartFingerprint: string) => void;
+  /** Re-reads price and availability for everything in the cart from the server. */
+  refreshProducts: () => Promise<void>;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
 
+function getIssue(product: Product, quantity: number): string | null {
+  if (product.stockQuantity <= 0) {
+    return 'No longer available';
+  }
+  if (quantity > product.stockQuantity) {
+    return `Only ${product.stockQuantity} available`;
+  }
+  return null;
+}
+
 export function CartProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(cartReducer, initialCartState);
   const [isHydrated, setIsHydrated] = useState(false);
+  const isRefreshing = useRef(false);
 
   useEffect(() => {
     let isActive = true;
@@ -60,19 +82,42 @@ export function CartProvider({ children }: PropsWithChildren) {
     }
   }, [isHydrated, state.entries]);
 
-  const lines: CartLine[] = [];
-  for (const entry of state.entries) {
-    const product = getProductById(entry.productId);
-    if (product) {
-      lines.push({
-        product,
-        quantity: entry.quantity,
-        lineTotal: calculateLineTotal(product.sellingPrice, entry.quantity),
-      });
-    }
-  }
+  const lines: CartLine[] = state.entries.map(({ product, quantity }) => ({
+    product,
+    quantity,
+    lineTotal: calculateLineTotal(product.sellingPrice, quantity),
+    issue: getIssue(product, quantity),
+  }));
 
   const getQuantity = (productId: string) => getEntryQuantity(state, productId);
+
+  const refreshProducts = async () => {
+    if (isRefreshing.current || state.entries.length === 0) {
+      return;
+    }
+    isRefreshing.current = true;
+
+    const products: Product[] = [];
+    const unavailableIds: string[] = [];
+    await Promise.all(
+      state.entries.map(async ({ product }) => {
+        try {
+          products.push(await fetchProduct(product.id));
+        } catch (error) {
+          // "Not found" is an answer: the product is gone. Any other failure (offline,
+          // timeout) tells us nothing, so the last-known snapshot stays as it is.
+          if (error instanceof ApiError && error.code === 'PRODUCT_NOT_FOUND') {
+            unavailableIds.push(product.id);
+          }
+        }
+      })
+    );
+
+    isRefreshing.current = false;
+    if (products.length > 0 || unavailableIds.length > 0) {
+      dispatch({ type: 'sync', products, unavailableIds });
+    }
+  };
 
   const value: CartContextValue = {
     lines,
@@ -80,21 +125,21 @@ export function CartProvider({ children }: PropsWithChildren) {
     subtotal: calculateSubtotal(
       lines.map((line) => ({ unitPrice: line.product.sellingPrice, quantity: line.quantity }))
     ),
+    hasIssues: lines.some((line) => line.issue !== null),
     isHydrated,
     getQuantity,
-    addItem: (product, quantity = 1) =>
-      dispatch({ type: 'add', productId: product.id, quantity, stock: product.stockQuantity }),
-    increment: (product) =>
-      dispatch({ type: 'add', productId: product.id, quantity: 1, stock: product.stockQuantity }),
+    addItem: (product, quantity = 1) => dispatch({ type: 'add', product, quantity }),
+    increment: (product) => dispatch({ type: 'add', product, quantity: 1 }),
     decrement: (product) =>
       dispatch({
         type: 'setQuantity',
         productId: product.id,
         quantity: getQuantity(product.id) - 1,
-        stock: product.stockQuantity,
       }),
     removeItem: (productId) => dispatch({ type: 'remove', productId }),
     clear: () => dispatch({ type: 'clear' }),
+    clearIfMatches: (fingerprint) => dispatch({ type: 'clearIfMatches', fingerprint }),
+    refreshProducts,
   };
 
   return <CartContext value={value}>{children}</CartContext>;

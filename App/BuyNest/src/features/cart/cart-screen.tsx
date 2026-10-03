@@ -1,4 +1,5 @@
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
+import { useEffect, useEffectEvent } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
@@ -8,10 +9,26 @@ import { Spacing } from '@/constants/theme';
 import { useCart } from '@/features/cart/cart-context';
 import { CartItem } from '@/features/cart/components/cart-item';
 import { CartSummary } from '@/features/cart/components/cart-summary';
+import { UnconfirmedOrderNotice } from '@/features/orders/components/unconfirmed-order-notice';
 
 export function CartScreen() {
   const router = useRouter();
-  const { lines, itemCount, subtotal, clear } = useCart();
+  const navigation = useNavigation();
+  const { lines, itemCount, subtotal, hasIssues, isHydrated, clear, refreshProducts } = useCart();
+
+  // Prices and stock in a saved cart can be days old, so re-read them whenever the cart
+  // is opened. A failed refresh keeps the last-known values; the server has the final say
+  // at checkout either way.
+  const refresh = useEffectEvent(() => {
+    if (isHydrated) {
+      refreshProducts();
+    }
+  });
+  useEffect(() => {
+    refresh();
+    // The tab stays mounted, so returning to it needs the focus event as well.
+    return navigation.addListener('focus', () => refresh());
+  }, [navigation, isHydrated]);
 
   if (lines.length === 0) {
     return (
@@ -34,24 +51,31 @@ export function CartScreen() {
         keyExtractor={(line) => line.product.id}
         contentContainerStyle={styles.content}
         ListHeaderComponent={
-          <View style={styles.header}>
-            <AppText variant="caption" color="textSecondary">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'}
-            </AppText>
-            <Pressable
-              accessibilityRole="button"
-              onPress={clear}
-              hitSlop={Spacing.three}
-              style={({ pressed }) => pressed && styles.pressed}>
-              <AppText variant="captionStrong" color="danger">
-                Clear cart
+          <View style={styles.headerBlock}>
+            <UnconfirmedOrderNotice />
+            <View style={styles.header}>
+              <AppText variant="caption" color="textSecondary">
+                {itemCount} {itemCount === 1 ? 'item' : 'items'}
               </AppText>
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={clear}
+                hitSlop={Spacing.three}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <AppText variant="captionStrong" color="danger">
+                  Clear cart
+                </AppText>
+              </Pressable>
+            </View>
           </View>
         }
         renderItem={({ item }) => <CartItem line={item} />}
       />
-      <CartSummary subtotal={subtotal} onCheckout={() => router.push('/checkout')} />
+      <CartSummary
+        subtotal={subtotal}
+        hasIssues={hasIssues}
+        onCheckout={() => router.push('/checkout')}
+      />
     </Screen>
   );
 }
@@ -59,6 +83,9 @@ export function CartScreen() {
 const styles = StyleSheet.create({
   content: {
     padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  headerBlock: {
     gap: Spacing.three,
   },
   header: {

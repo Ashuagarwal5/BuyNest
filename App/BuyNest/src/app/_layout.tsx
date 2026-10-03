@@ -34,6 +34,7 @@ export default function RootLayout() {
         <ThemeProvider value={navigationTheme}>
           <Stack screenOptions={{ headerTintColor: theme.primary, headerBackTitle: 'Back' }}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="search" options={{ title: 'Search' }} />
             <Stack.Screen name="category/[slug]" options={{ title: 'Category' }} />
             <Stack.Screen name="product/[id]" options={{ title: '' }} />
             <Stack.Screen name="checkout/index" options={{ title: 'Checkout' }} />

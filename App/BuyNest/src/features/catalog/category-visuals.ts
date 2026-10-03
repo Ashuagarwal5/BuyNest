@@ -5,7 +5,6 @@
  */
 
 import type { IconName } from '@/components/ui/icon';
-import { getCategoryById } from '@/data/categories';
 
 const ICON_BY_SLUG: Record<string, IconName> = {
   stationery: 'stationery',
@@ -19,9 +18,4 @@ const FALLBACK_ICON: IconName = 'categories';
 
 export function getCategoryIcon(slug: string): IconName {
   return ICON_BY_SLUG[slug] ?? FALLBACK_ICON;
-}
-
-export function getCategoryIconById(categoryId: string): IconName {
-  const category = getCategoryById(categoryId);
-  return category ? getCategoryIcon(category.slug) : FALLBACK_ICON;
 }

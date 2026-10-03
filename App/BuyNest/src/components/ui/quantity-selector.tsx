@@ -34,7 +34,8 @@ export function QuantitySelector({
       accessibilityState={{ disabled: !enabled }}
       disabled={!enabled}
       onPress={onPress}
-      hitSlop={Spacing.one}
+      // The small selector's 36 dp buttons grow to Android's 48 dp touch target this way.
+      hitSlop={Spacing.two}
       style={({ pressed }) => [
         styles.button,
         { width: buttonSize, height: buttonSize },

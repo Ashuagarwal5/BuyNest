@@ -5,16 +5,19 @@ import { Spacing } from '@/constants/theme';
 import type { OrderAddress as OrderAddressType } from '@/types/order';
 
 type OrderAddressProps = {
+  recipientName: string;
   address: OrderAddressType;
 };
 
-export function OrderAddress({ address }: OrderAddressProps) {
-  const streetLines = [address.addressLine1, address.addressLine2].filter(Boolean);
+export function OrderAddress({ recipientName, address }: OrderAddressProps) {
+  const streetLines = [address.addressLine1, address.addressLine2].filter(
+    (line): line is string => Boolean(line)
+  );
   const locality = [address.area, address.city].filter(Boolean).join(', ');
 
   return (
     <View style={styles.container}>
-      <AppText variant="bodyStrong">{address.fullName}</AppText>
+      <AppText variant="bodyStrong">{recipientName}</AppText>
       {streetLines.map((line) => (
         <AppText key={line} color="textSecondary">
           {line}

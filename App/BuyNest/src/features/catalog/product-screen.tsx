@@ -1,41 +1,57 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Icon } from '@/components/ui/icon';
+import { ErrorState } from '@/components/ui/error-state';
+import { LoadingState } from '@/components/ui/loading-state';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { Screen } from '@/components/ui/screen';
 import { type ThemeColor, Radius, Spacing } from '@/constants/theme';
-import { getProductById } from '@/data/products';
 import { useCart } from '@/features/cart/cart-context';
 import { PriceDisplay } from '@/features/catalog/components/price-display';
 import { ProductImage } from '@/features/catalog/components/product-image';
+import { useApiData } from '@/hooks/use-api-data';
 import { useTheme } from '@/hooks/use-theme';
+import { fetchProduct } from '@/services/api/catalog-api';
 import type { Product } from '@/types/catalog';
 
 const LOW_STOCK_THRESHOLD = 5;
+const SCREEN_EDGES = ['left', 'right', 'bottom'] as const;
 
 export function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const product = getProductById(id);
+  const product = useApiData(`product:${id}`, (signal) => fetchProduct(id, signal));
 
-  if (!product) {
+  if (product.status === 'success') {
     return (
-      <Screen edges={['left', 'right', 'bottom']}>
-        <Stack.Screen options={{ title: 'Product' }} />
+      <ProductDetails
+        product={product.data}
+        isRefreshing={product.isRefreshing}
+        onRefresh={product.reload}
+      />
+    );
+  }
+
+  return (
+    <Screen edges={SCREEN_EDGES}>
+      <Stack.Screen options={{ title: 'Product' }} />
+      {product.status === 'loading' ? (
+        <LoadingState />
+      ) : product.error.code === 'PRODUCT_NOT_FOUND' ? (
+        // A definite answer from the server, so there is nothing to retry.
         <EmptyState
           icon="store"
           title="Product not found"
           message="This product is no longer available."
         />
-      </Screen>
-    );
-  }
-
-  return <ProductDetails product={product} />;
+      ) : (
+        <ErrorState error={product.error} onRetry={product.reload} />
+      )}
+    </Screen>
+  );
 }
 
 function getStockStatus(stock: number): { label: string; color: ThemeColor } {
@@ -48,7 +64,13 @@ function getStockStatus(stock: number): { label: string; color: ThemeColor } {
   return { label: 'In stock', color: 'success' };
 }
 
-function ProductDetails({ product }: { product: Product }) {
+type ProductDetailsProps = {
+  product: Product;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+};
+
+function ProductDetails({ product, isRefreshing, onRefresh }: ProductDetailsProps) {
   const theme = useTheme();
   const router = useRouter();
   const { getQuantity, addItem } = useCart();
@@ -74,21 +96,25 @@ function ProductDetails({ product }: { product: Product }) {
   };
 
   return (
-    <Screen edges={['left', 'right', 'bottom']}>
+    <Screen edges={SCREEN_EDGES}>
       <Stack.Screen options={{ title: '' }} />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }>
         <ProductImage product={product} iconSize={96} style={styles.image} />
 
         <View style={styles.section}>
+          <AppText variant="captionStrong" color="primary">
+            {product.categoryName}
+          </AppText>
           <AppText variant="heading">{product.name}</AppText>
-          {product.rating !== null ? (
-            <View style={styles.rating}>
-              <Icon name="star" size={16} color="accent" />
-              <AppText variant="captionStrong" color="textSecondary">
-                {product.rating.toFixed(1)}
-              </AppText>
-            </View>
-          ) : null}
           <PriceDisplay sellingPrice={product.sellingPrice} mrp={product.mrp} size="large" />
           <AppText variant="captionStrong" color={stockStatus.color}>
             {stockStatus.label}
@@ -155,11 +181,6 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: Spacing.two,
-  },
-  rating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
   },
   actions: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-/** A locality the shop delivers to. All money values are integer paise. */
+/** A locality the shop currently delivers to. All money values are integer paise. */
 export type DeliveryArea = {
   id: string;
   name: string;
@@ -8,5 +8,4 @@ export type DeliveryArea = {
   minimumOrder?: number;
   /** Subtotal at or above which delivery is free. */
   freeDeliveryThreshold?: number;
-  isActive: boolean;
 };

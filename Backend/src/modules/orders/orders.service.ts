@@ -2,6 +2,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { AppError, conflict, notFound, unprocessable } from '../../lib/errors.js';
 import { calculateLineTotal, calculateOrderTotals } from '../../lib/pricing.js';
 import { prisma, type TransactionClient } from '../../lib/prisma.js';
+import { createRequestFingerprint } from './fingerprint.js';
 import { generateTrackingToken, issueOrderNumber, isSameToken } from './order-number.js';
 import type { CreateOrderInput } from './orders.schemas.js';
 
@@ -122,6 +123,7 @@ async function reservationFailure(
 async function placeOrder(
   tx: TransactionClient,
   input: CreateOrderInput,
+  requestFingerprint: string,
   now: Date
 ): Promise<OrderWithRelations> {
   const area = await tx.deliveryArea.findUnique({ where: { id: input.deliveryAreaId } });
@@ -200,6 +202,7 @@ async function placeOrder(
     data: {
       orderNumber: await issueOrderNumber(tx, now),
       clientRequestId: input.clientRequestId,
+      requestFingerprint,
       trackingToken: generateTrackingToken(),
       customerId: customer.id,
       customerName: input.customer.fullName,
@@ -239,28 +242,49 @@ function findOrderByClientRequestId(clientRequestId: string) {
 }
 
 /**
+ * A repeated clientRequestId is only a retry if it asks for the same purchase. Anything
+ * else would let one id stand for two different orders, and would hand the first order's
+ * tracking token to a request that does not know what the first order was.
+ *
+ * A missing fingerprint (an order created before fingerprints existed) can never be
+ * confirmed, so it never matches.
+ */
+function replayOf(existing: OrderWithRelations, fingerprint: string): PlacedOrder {
+  if (existing.requestFingerprint !== fingerprint) {
+    throw conflict(
+      'IDEMPOTENCY_CONFLICT',
+      'This request id was already used for a different order. Start a new order to continue.'
+    );
+  }
+  return toPlacedOrder(existing);
+}
+
+/**
  * Creates an order, or returns the one already created for this `clientRequestId`.
  * `created` is false for such a replay, so a retried request (double tap, timeout, weak
- * connection) can never produce a second order.
+ * connection) can never produce a second order. The replay must carry the same purchase
+ * as the original; a different one is rejected with IDEMPOTENCY_CONFLICT.
  */
 export async function createOrder(
   input: CreateOrderInput
 ): Promise<{ order: PlacedOrder; created: boolean }> {
+  const fingerprint = createRequestFingerprint(input);
+
   const existing = await findOrderByClientRequestId(input.clientRequestId);
   if (existing) {
-    return { order: toPlacedOrder(existing), created: false };
+    return { order: replayOf(existing, fingerprint), created: false };
   }
 
   try {
-    const order = await prisma.$transaction((tx) => placeOrder(tx, input, new Date()));
+    const order = await prisma.$transaction((tx) => placeOrder(tx, input, fingerprint, new Date()));
     return { order: toPlacedOrder(order), created: true };
   } catch (error) {
     // Two copies of the same request can run at once. The loser fails, either on the
-    // unique clientRequestId or because the winner just reserved the stock, and must
-    // still answer with the winner's order rather than an error.
+    // unique clientRequestId or because the winner just reserved the stock. If it carries
+    // the same purchase it answers with the winner's order; if not, it is a conflict.
     const winner = await findOrderByClientRequestId(input.clientRequestId);
     if (winner) {
-      return { order: toPlacedOrder(winner), created: false };
+      return { order: replayOf(winner, fingerprint), created: false };
     }
     throw error;
   }

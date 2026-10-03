@@ -1,17 +1,19 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
 import { SectionCard } from '@/components/ui/section-card';
 import { Radius, Spacing } from '@/constants/theme';
 import { OrderAddress } from '@/features/orders/components/order-address';
 import { OrderStatusBadge } from '@/features/orders/components/status-badges';
-import { useOrders } from '@/features/orders/order-context';
 import { PAYMENT_METHOD_DISPLAY } from '@/features/orders/order-status';
+import { useTrackedOrder } from '@/features/orders/use-tracked-order';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCurrency } from '@/utils/money';
 
@@ -20,22 +22,24 @@ const SCREEN_EDGES = ['left', 'right', 'bottom'] as const;
 export function OrderSuccessScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { getOrderById, status } = useOrders();
-  const order = getOrderById(id);
+  const { id: orderNumber } = useLocalSearchParams<{ id: string }>();
+  // Checkout arrives here with the order the server just returned already in memory.
+  const view = useTrackedOrder(orderNumber, false);
 
   const goHome = () => router.dismissTo('/');
 
-  if (!order) {
+  if (view.status !== 'ready') {
     return (
-      <Screen edges={SCREEN_EDGES} style={status === 'loading' ? styles.centered : undefined}>
-        {status === 'loading' ? (
-          <ActivityIndicator color={theme.primary} />
+      <Screen edges={SCREEN_EDGES}>
+        {view.status === 'loading' ? (
+          <LoadingState />
+        ) : view.status === 'error' ? (
+          <ErrorState error={view.error} onRetry={view.refresh} />
         ) : (
           <EmptyState
             icon="orders"
             title="Order not found"
-            message="We could not find this order on this device."
+            message="This order was not placed from this device, so it cannot be opened here."
             actionLabel="Continue Shopping"
             onAction={goHome}
           />
@@ -43,6 +47,8 @@ export function OrderSuccessScreen() {
       </Screen>
     );
   }
+
+  const { order } = view;
 
   return (
     <Screen edges={SCREEN_EDGES}>
@@ -79,14 +85,16 @@ export function OrderSuccessScreen() {
         </SectionCard>
 
         <SectionCard title="Delivering To">
-          <OrderAddress address={order.deliveryAddress} />
+          <OrderAddress recipientName={order.customerName} address={order.deliveryAddress} />
         </SectionCard>
 
         <View style={styles.actions}>
           {/* replace: Back from the order should not land on this confirmation again. */}
           <PrimaryButton
             title="View Order"
-            onPress={() => router.replace({ pathname: '/orders/[id]', params: { id: order.id } })}
+            onPress={() =>
+              router.replace({ pathname: '/orders/[id]', params: { id: order.orderNumber } })
+            }
           />
           <PrimaryButton title="Continue Shopping" variant="secondary" onPress={goHome} />
         </View>
@@ -96,10 +104,6 @@ export function OrderSuccessScreen() {
 }
 
 const styles = StyleSheet.create({
-  centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   content: {
     padding: Spacing.three,
     gap: Spacing.three,

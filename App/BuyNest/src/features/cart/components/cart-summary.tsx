@@ -8,10 +8,12 @@ import { formatCurrency } from '@/utils/money';
 
 type CartSummaryProps = {
   subtotal: number;
+  /** True when a line is unavailable or above stock; checkout would be rejected. */
+  hasIssues: boolean;
   onCheckout: () => void;
 };
 
-export function CartSummary({ subtotal, onCheckout }: CartSummaryProps) {
+export function CartSummary({ subtotal, hasIssues, onCheckout }: CartSummaryProps) {
   const theme = useTheme();
 
   return (
@@ -27,7 +29,12 @@ export function CartSummary({ subtotal, onCheckout }: CartSummaryProps) {
           Calculated at checkout
         </AppText>
       </View>
-      <PrimaryButton title="Proceed to Checkout" onPress={onCheckout} />
+      {hasIssues ? (
+        <AppText variant="caption" color="danger">
+          Some items need attention. Reduce the quantity or remove them to continue.
+        </AppText>
+      ) : null}
+      <PrimaryButton title="Proceed to Checkout" disabled={hasIssues} onPress={onCheckout} />
     </View>
   );
 }

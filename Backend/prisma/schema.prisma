@@ -128,6 +128,10 @@ model Order {
   orderNumber     String @unique
   // Supplied by the client; a retry with the same value returns this order instead of creating another.
   clientRequestId String @unique
+  // SHA-256 of the canonical order intent (see orders/fingerprint.ts). A repeat of
+  // clientRequestId is only accepted when its fingerprint matches, so one id can never
+  // stand for two different purchases. Null only for orders created before this existed.
+  requestFingerprint String?
   // Opaque secret returned once to the customer; required to read or cancel the order.
   trackingToken   String
   customerId      String
