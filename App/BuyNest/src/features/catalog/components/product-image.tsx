@@ -4,6 +4,7 @@ import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { Icon } from '@/components/ui/icon';
 import { getCategoryIcon } from '@/features/catalog/category-visuals';
 import { useTheme } from '@/hooks/use-theme';
+import { resolveMediaUrl } from '@/services/api/config';
 import type { Product } from '@/types/catalog';
 
 type ProductImageProps = {
@@ -21,7 +22,7 @@ export function ProductImage({ product, iconSize = 40, style }: ProductImageProp
     <View style={[styles.container, { backgroundColor: theme.primarySoft }, style]}>
       {primaryImage ? (
         <Image
-          source={{ uri: primaryImage }}
+          source={{ uri: resolveMediaUrl(primaryImage) }}
           contentFit="cover"
           accessibilityLabel={product.name}
           style={StyleSheet.absoluteFill}

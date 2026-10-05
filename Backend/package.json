@@ -16,6 +16,7 @@
     "test": "vitest run",
     "db:dev": "tsx scripts/dev-db.ts",
     "db:reset-dev": "tsx scripts/reset-dev-data.ts",
+    "db:studio": "prisma studio --config prisma7.config.ts",
     "admin:create": "tsx scripts/create-admin.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -31,11 +32,13 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
+    "multer": "^2.4.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
     "@types/node": "^24.19.1",
     "@types/supertest": "^7.2.1",
     "embedded-postgres": "^18.4.0-beta.17",

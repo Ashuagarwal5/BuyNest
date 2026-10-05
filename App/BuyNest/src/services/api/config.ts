@@ -50,6 +50,16 @@ export const API_BASE_URL: string = config.baseUrl ?? '';
 
 export const API_V1_URL = `${API_BASE_URL}/api/v1`;
 
+/**
+ * Turns a stored picture or video address into one the phone can load. Files uploaded through
+ * the admin panel are stored as "/uploads/<name>" and live on the API's server; other addresses
+ * are already complete. This is done when a picture is shown, never saved, so a changed API
+ * address (a new Wi-Fi IP while developing) cannot leave old addresses behind in a saved cart.
+ */
+export function resolveMediaUrl(url: string): string {
+  return url.startsWith('/uploads/') ? `${API_BASE_URL}${url}` : url;
+}
+
 export const REQUEST_TIMEOUT_MS = 15_000;
 
 /**

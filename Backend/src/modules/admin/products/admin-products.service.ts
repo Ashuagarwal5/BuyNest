@@ -4,6 +4,8 @@ import { pageArgs, pageResult } from '../../../lib/pagination.js';
 import { isUniqueViolation } from '../../../lib/prisma-errors.js';
 import { prisma } from '../../../lib/prisma.js';
 import { slugify } from '../../../lib/slug.js';
+import { uploadedFileExists } from '../../media/media-storage.js';
+import { UPLOAD_URL_PREFIX } from '../../media/media-types.js';
 import type { AdminContext } from '../auth/session.js';
 import type {
   CreateProductBody,
@@ -46,6 +48,7 @@ function toAdminProduct(product: ProductWithRelations) {
     images: product.images.map((image) => ({
       id: image.id,
       url: image.url,
+      mediaType: image.mediaType,
       altText: image.altText,
       displayOrder: image.displayOrder,
     })),
@@ -106,9 +109,21 @@ async function assertCategoryExists(categoryId: string) {
   }
 }
 
+/** A product may only point at uploaded files that really exist, so a typo or a cleaned-up file cannot leave a broken picture. */
+async function assertUploadedFilesExist(images: CreateProductBody['images']) {
+  for (const [index, image] of images.entries()) {
+    if (image.url.startsWith(UPLOAD_URL_PREFIX) && !(await uploadedFileExists(image.url))) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'One of the uploaded files could not be found. Upload it again.', [
+        { field: `images.${index}.url`, message: 'This uploaded file no longer exists' },
+      ]);
+    }
+  }
+}
+
 function imageRows(images: CreateProductBody['images']) {
   return images.map((image, displayOrder) => ({
     url: image.url,
+    mediaType: image.mediaType,
     altText: image.altText,
     displayOrder,
   }));
@@ -163,6 +178,7 @@ export async function createProduct(body: CreateProductBody, admin: AdminContext
 
   await assertCategoryExists(body.categoryId);
   await assertUnique({ sku: body.sku, slug });
+  await assertUploadedFilesExist(body.images);
 
   try {
     const created = await prisma.product.create({
@@ -220,6 +236,9 @@ export async function updateProduct(id: string, body: UpdateProductBody) {
 
   if (body.categoryId !== undefined && body.categoryId !== existing.categoryId) {
     await assertCategoryExists(body.categoryId);
+  }
+  if (body.images !== undefined) {
+    await assertUploadedFilesExist(body.images);
   }
   await assertUnique(
     {

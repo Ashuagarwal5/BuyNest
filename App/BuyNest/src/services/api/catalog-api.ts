@@ -30,6 +30,11 @@ function parseCategory(value: unknown): Category {
 function parseProduct(value: unknown): Product {
   const dto = asObject(value);
   const category = asObject(dto.category);
+  // A server that predates videos sends no mediaType, and everything it sends is a picture.
+  const media = asArray(dto.images, (item) => {
+    const entry = asObject(item);
+    return { url: asString(entry.url), isVideo: entry.mediaType === 'VIDEO' };
+  });
   return {
     id: asString(dto.id),
     name: asString(dto.name),
@@ -38,7 +43,8 @@ function parseProduct(value: unknown): Product {
     categoryId: asString(category.id),
     categorySlug: asString(category.slug),
     categoryName: asString(category.name),
-    images: asArray(dto.images, (image) => asString(asObject(image).url)),
+    images: media.filter((item) => !item.isVideo).map((item) => item.url),
+    videos: media.filter((item) => item.isVideo).map((item) => item.url),
     mrp: asInteger(dto.mrpPaise),
     sellingPrice: asInteger(dto.sellingPricePaise),
     stockQuantity: Math.max(asInteger(dto.availableQuantity), 0),

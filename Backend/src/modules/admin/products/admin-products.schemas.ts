@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { booleanFlag, paginationQuery, searchText } from '../../../lib/pagination.js';
 import { slugSchema } from '../../../lib/slug.js';
+import { STORED_FILE_NAME, UPLOAD_URL_PREFIX } from '../../media/media-types.js';
 
 /** ₹10,00,000 in paise: a sanity ceiling that catches a stray extra zero, not a business limit. */
 const MAX_PAISE = 100_000_000;
@@ -10,8 +11,18 @@ const MAX_UNITS = 1_000_000;
 /** Integer paise, never a float and never negative. */
 const paise = z.number().int().min(0).max(MAX_PAISE);
 
+/** A full web address, or the path this server returned when a file was uploaded. */
+const mediaUrl = z.union([
+  z.url({ protocol: /^https?$/ }).max(2000),
+  z
+    .string()
+    .startsWith(UPLOAD_URL_PREFIX)
+    .refine((value) => STORED_FILE_NAME.test(value.slice(UPLOAD_URL_PREFIX.length)), 'Not an uploaded file'),
+]);
+
 const imageSchema = z.strictObject({
-  url: z.url({ protocol: /^https?$/ }).max(2000),
+  url: mediaUrl,
+  mediaType: z.enum(['IMAGE', 'VIDEO']).default('IMAGE'),
   altText: z
     .string()
     .trim()
@@ -37,8 +48,11 @@ const productFields = {
   isFeatured: z.boolean(),
   isNew: z.boolean(),
   isActive: z.boolean(),
-  /** The full list: on update it replaces the existing images. The first one is the main image. */
-  images: z.array(imageSchema).max(10),
+  /** The full list of pictures and videos: on update it replaces the existing ones. The first picture is the main one. */
+  images: z
+    .array(imageSchema)
+    .max(10)
+    .refine((items) => items.filter((item) => item.mediaType === 'VIDEO').length <= 3, 'Add at most 3 videos'),
 };
 
 /** A selling price above the MRP is almost always a typo, so it is rejected. */

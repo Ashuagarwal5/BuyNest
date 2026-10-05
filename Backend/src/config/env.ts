@@ -1,5 +1,7 @@
 import 'dotenv/config';
 
+import path from 'node:path';
+
 import { z } from 'zod';
 
 const envSchema = z.object({
@@ -14,6 +16,8 @@ const envSchema = z.object({
    * rate limit sees each visitor's address rather than the proxy's.
    */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
+  /** Where uploaded product pictures and videos are stored. Relative paths start at the Backend folder. */
+  UPLOAD_DIR: z.string().trim().min(1).default('uploads'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -36,4 +40,5 @@ export const env = {
     .filter(Boolean),
   adminSessionTtlMs: parsed.data.ADMIN_SESSION_TTL_HOURS * 60 * 60 * 1000,
   trustProxyHops: parsed.data.TRUST_PROXY_HOPS,
+  uploadDir: path.resolve(parsed.data.UPLOAD_DIR),
 };

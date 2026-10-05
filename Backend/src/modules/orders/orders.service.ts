@@ -150,7 +150,7 @@ async function placeOrder(
     where: { id: { in: requestedItems.map((item) => item.productId) } },
     include: {
       category: { select: { isActive: true } },
-      images: { orderBy: { displayOrder: 'asc' }, take: 1, select: { url: true } },
+      images: { where: { mediaType: 'IMAGE' }, orderBy: { displayOrder: 'asc' }, take: 1, select: { url: true } },
     },
   });
   const productsById = new Map(products.map((product) => [product.id, product]));

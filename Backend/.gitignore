@@ -13,3 +13,5 @@ dist/
 /.pgdata/
 
 *.log
+
+/uploads/

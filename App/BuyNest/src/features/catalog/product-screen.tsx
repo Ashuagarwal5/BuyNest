@@ -9,10 +9,10 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { Screen } from '@/components/ui/screen';
-import { type ThemeColor, Radius, Spacing } from '@/constants/theme';
+import { type ThemeColor, Spacing } from '@/constants/theme';
 import { useCart } from '@/features/cart/cart-context';
 import { PriceDisplay } from '@/features/catalog/components/price-display';
-import { ProductImage } from '@/features/catalog/components/product-image';
+import { ProductGallery } from '@/features/catalog/components/product-gallery';
 import { useApiData } from '@/hooks/use-api-data';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchProduct } from '@/services/api/catalog-api';
@@ -108,7 +108,7 @@ function ProductDetails({ product, isRefreshing, onRefresh }: ProductDetailsProp
             colors={[theme.primary]}
           />
         }>
-        <ProductImage product={product} iconSize={96} style={styles.image} />
+        <ProductGallery product={product} />
 
         <View style={styles.section}>
           <AppText variant="captionStrong" color="primary">
@@ -172,12 +172,6 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.three,
     gap: Spacing.four,
-  },
-  image: {
-    aspectRatio: 4 / 3,
-    maxHeight: 320,
-    alignSelf: 'stretch',
-    borderRadius: Radius.large,
   },
   section: {
     gap: Spacing.two,

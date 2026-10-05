@@ -70,6 +70,7 @@ up for development. It is safe to re-run and never resets stock.
 | `CORS_ORIGINS` | no       | Comma-separated browser origins (the admin panel's address). Empty allows all in development, none in production |
 | `ADMIN_SESSION_TTL_HOURS` | no | How long an admin stays signed in, default `12` |
 | `TRUST_PROXY_HOPS` | no | Reverse proxies in front of the API, default `0` |
+| `UPLOAD_DIR` | no | Where uploaded product pictures and videos are stored, default `uploads` (inside `Backend`) |
 | `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD` / `ADMIN_SEED_NAME` | for `admin:create` | The first admin account. No defaults; see Admin setup |
 
 `.env` is ignored by Git. Never commit real credentials.
@@ -221,6 +222,7 @@ and a wrong password, an unknown email and an inactive account all get the same 
 | GET    | `/products`                            | `search` (name/SKU), `categoryId`, `isActive`, `lowStock`, paging |
 | POST   | `/products`                            | Create (with opening stock and images)               |
 | GET/PATCH | `/products/:id`                     | Read / edit details (not stock)                      |
+| POST   | `/uploads`                             | Upload one picture or video (multipart field `file`); returns `{ url, mediaType, sizeBytes }` |
 | POST   | `/products/:id/inventory-adjustment`   | `{ quantityDelta, note }`: the only way to change stock |
 | GET/POST | `/categories`                        | List all / create                                    |
 | PATCH  | `/categories/:id`                      | Edit or deactivate                                   |
@@ -233,6 +235,22 @@ Lists are paginated (`page`, default 1; `limit`, default 25, **maximum 100**) an
 days as `YYYY-MM-DD`, both inclusive. Money is integer paise everywhere. Nothing is ever
 deleted through the API: products, categories and delivery areas are deactivated with
 `isActive: false`. Admin responses never contain tracking tokens.
+
+### Product pictures and videos
+
+The admin panel uploads a file to `POST /admin/uploads`, gets back a path such as
+`/uploads/<random-id>.jpg`, and saves that path on the product (`images: [{ url, mediaType }]`).
+Anyone can view `GET /uploads/<name>`, because customers see product media.
+
+- **Allowed:** JPG, PNG, WebP and GIF pictures up to 5 MB; MP4, MOV and WebM videos up to 50 MB.
+  A product holds at most 10 items, of which at most 3 are videos. The first picture is the main one.
+- **The type comes from the file's contents,** not its name or declared type. A text file called
+  `photo.jpg` is refused, and so are HEIC phone photos (with a message to save them as JPG).
+- **Files are stored under a random name** with an extension the server picks, in `UPLOAD_DIR`.
+  The database stores only that path. A product can only point at an uploaded file that exists.
+- **Back up `UPLOAD_DIR` together with the database.** Restoring one without the other leaves
+  products pointing at missing files. The folder is ignored by Git.
+- Removing a picture from a product does not delete its file from disk yet.
 
 ### Order status rules
 

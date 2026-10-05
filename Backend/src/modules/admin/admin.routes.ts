@@ -8,6 +8,7 @@ import { adminDeliveryAreasRouter } from './delivery-areas/admin-delivery-areas.
 import { createAdminAuthRouter, type LoginRateLimit } from './auth/admin-auth.routes.js';
 import { adminOrdersRouter } from './orders/admin-orders.routes.js';
 import { adminProductsRouter } from './products/admin-products.routes.js';
+import { adminUploadsRouter } from './uploads/admin-uploads.routes.js';
 
 /**
  * Everything under /api/v1/admin. The order of the lines is the security model:
@@ -29,6 +30,7 @@ export function createAdminRouter(loginRateLimit: LoginRateLimit) {
   router.use('/categories', adminCategoriesRouter);
   router.use('/delivery-areas', adminDeliveryAreasRouter);
   router.use('/customers', adminCustomersRouter);
+  router.use('/uploads', adminUploadsRouter);
 
   return router;
 }

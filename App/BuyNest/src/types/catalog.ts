@@ -19,8 +19,10 @@ export type Product = {
   categoryId: string;
   categorySlug: string;
   categoryName: string;
-  /** Image URLs, first one is the primary image. */
+  /** Picture addresses, first one is the primary image. May be a path such as /uploads/… (see resolveMediaUrl). */
   images: string[];
+  /** Video addresses. Missing in carts saved by older versions of the app. */
+  videos?: string[];
   mrp: number;
   sellingPrice: number;
   /** Units a customer can order right now (stock minus units held by other orders). */

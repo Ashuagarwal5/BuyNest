@@ -58,6 +58,9 @@ export default async function setup() {
   process.env['NODE_ENV'] = 'test';
   // One allowed admin origin, so tests can check that other origins are refused.
   process.env['CORS_ORIGINS'] = 'http://localhost:3000';
+  // Uploaded files go to a throwaway folder, never the real uploads directory.
+  const uploadDir = mkdtempSync(path.join(os.tmpdir(), 'buynest-test-uploads-'));
+  process.env['UPLOAD_DIR'] = uploadDir;
 
   execSync('npx prisma migrate deploy', {
     cwd: path.resolve(import.meta.dirname, '..'),
@@ -69,5 +72,6 @@ export default async function setup() {
     await stopPostgres(postgres, dataDir);
     // Windows keeps the data files locked for a moment after PostgreSQL exits, so retry.
     await rm(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await rm(uploadDir, { recursive: true, force: true });
   };
 }

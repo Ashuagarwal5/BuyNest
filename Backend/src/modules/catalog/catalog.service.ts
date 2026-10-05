@@ -6,7 +6,7 @@ import type { ListProductsQuery } from './catalog.schemas.js';
 /** Only what customers may see: nothing inactive, and no internal stock bookkeeping. */
 const publicProductInclude = {
   category: { select: { id: true, name: true, slug: true } },
-  images: { orderBy: { displayOrder: 'asc' }, select: { url: true, altText: true } },
+  images: { orderBy: { displayOrder: 'asc' }, select: { url: true, altText: true, mediaType: true } },
 } satisfies Prisma.ProductInclude;
 
 type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof publicProductInclude }>;

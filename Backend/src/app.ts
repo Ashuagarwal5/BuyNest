@@ -39,6 +39,17 @@ export function createApp(options: AppOptions = {}): Express {
       exposedHeaders: ['Idempotent-Replayed'],
     })
   );
+  // Uploaded product pictures and videos. They are public (customers see them), served read-only
+  // by exact file name, with range support so videos can seek. Helmet's default would stop the
+  // admin panel and app, which live on other origins, from displaying them.
+  app.use(
+    '/uploads',
+    (_req, res, next) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      next();
+    },
+    express.static(env.uploadDir, { index: false, dotfiles: 'ignore', maxAge: '7d', immutable: true })
+  );
   app.use(express.json({ limit: '100kb' }));
 
   if (!env.isTest) {
