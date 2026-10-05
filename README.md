@@ -7,19 +7,23 @@ delivered locally with Cash on Delivery.
 | ----------------- | ----------------------------------------------------------------- |
 | `App/BuyNest`     | Customer mobile app (Expo, React Native, Expo Router)             |
 | `Backend`         | REST API (Express, Prisma, PostgreSQL). See `Backend/README.md`   |
-| `Admin/Frontend`  | Admin dashboard (not started)                                     |
+| `Admin/Frontend`  | Admin panel (Next.js, Tailwind). See `Admin/Frontend/README.md`   |
 
 `CLAUDE.md` holds the project's working instructions.
 
 ## Running it locally
 
-Three things run together. Start them in separate terminals.
+These run together. Start them in separate terminals.
 
 ```bash
 cd Backend && npm run db:dev      # the database (keep it open)
 cd Backend && npm run dev         # the API on port 4000
 cd App/BuyNest && npm start       # the mobile app
+cd Admin/Frontend && npm run dev  # the admin panel on http://localhost:3000
 ```
+
+The admin panel needs an admin account first: set `ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`
+and `ADMIN_SEED_NAME` in `Backend/.env`, then run `cd Backend && npm run admin:create`.
 
 ### Telling the app where the API is
 

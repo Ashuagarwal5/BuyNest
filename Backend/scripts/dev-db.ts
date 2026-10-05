@@ -19,7 +19,10 @@ const DATABASE = 'buynest';
 const USER = 'postgres';
 const PASSWORD = 'postgres';
 
-const dataDir = path.resolve(import.meta.dirname, '..', '.pgdata');
+// DEV_DB_DIR lets a second, throwaway database run beside the normal one (with DEV_DB_PORT).
+const dataDir = process.env['DEV_DB_DIR']
+  ? path.resolve(process.env['DEV_DB_DIR'])
+  : path.resolve(import.meta.dirname, '..', '.pgdata');
 
 const postgres = new EmbeddedPostgres({
   databaseDir: dataDir,
@@ -32,7 +35,7 @@ const postgres = new EmbeddedPostgres({
 });
 
 if (!existsSync(path.join(dataDir, 'PG_VERSION'))) {
-  console.log('[dev-db] Creating a new database cluster in .pgdata ...');
+  console.log(`[dev-db] Creating a new database cluster in ${dataDir} ...`);
   await postgres.initialise();
 }
 
