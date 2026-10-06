@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -21,13 +22,22 @@ const SERVICE_POINTS: { icon: IconName; label: string }[] = [
   { icon: 'cash', label: 'Cash on Delivery available' },
 ];
 
+/** How many products a category row shows on the home screen; "View all" opens the rest. */
+const HOME_ROW_SIZE = 10;
+
 async function loadHome(signal: AbortSignal) {
   const [categories, popular, newArrivals] = await Promise.all([
     fetchCategories(signal),
     fetchProducts({ featured: true }, signal),
     fetchProducts({ isNew: true }, signal),
   ]);
-  return { categories, popular, newArrivals };
+  const categoryRows = await Promise.all(
+    categories.map(async (category) => ({
+      category,
+      products: (await fetchProducts({ categorySlug: category.slug }, signal)).slice(0, HOME_ROW_SIZE),
+    }))
+  );
+  return { categories, popular, newArrivals, categoryRows };
 }
 
 export function HomeScreen() {
@@ -38,9 +48,17 @@ export function HomeScreen() {
   const header = (
     <View style={styles.padded}>
       <View style={styles.header}>
-        <AppText variant="title" color="primary" accessibilityRole="header">
-          BuyNest
-        </AppText>
+        <View style={styles.brand}>
+          <Image
+            source={require('../../../assets/images/favicon.png')}
+            style={styles.logo}
+            contentFit="contain"
+            accessibilityIgnoresInvertColors
+          />
+          <AppText variant="title" color="primary" accessibilityRole="header">
+            DoorKart
+          </AppText>
+        </View>
         <View style={styles.delivery}>
           <Icon name="location" size={20} color="primary" />
           <View>
@@ -72,7 +90,7 @@ export function HomeScreen() {
     );
   }
 
-  const { categories, popular, newArrivals } = home.data;
+  const { categories, popular, newArrivals, categoryRows } = home.data;
 
   return (
     <Screen>
@@ -102,7 +120,7 @@ export function HomeScreen() {
               <SectionHeader
                 title="Shop by category"
                 actionLabel="See all"
-                onAction={() => router.navigate('/categories')}
+                onAction={() => router.navigate('/products')}
               />
             </View>
             <FlatList
@@ -116,8 +134,24 @@ export function HomeScreen() {
           </View>
         ) : null}
 
-        <ProductRail title="Popular Products" products={popular} />
-        <ProductRail title="New Arrivals" products={newArrivals} />
+        <ProductRail
+          title="Popular Products"
+          products={popular}
+          onViewAll={() => router.push({ pathname: '/collection/[kind]', params: { kind: 'popular' } })}
+        />
+        <ProductRail
+          title="New Arrivals"
+          products={newArrivals}
+          onViewAll={() => router.push({ pathname: '/collection/[kind]', params: { kind: 'new' } })}
+        />
+        {categoryRows.map(({ category, products }) => (
+          <ProductRail
+            key={category.id}
+            title={category.name}
+            products={products}
+            onViewAll={() => router.push({ pathname: '/category/[slug]', params: { slug: category.slug } })}
+          />
+        ))}
 
         <View style={styles.padded}>
           <View
@@ -138,6 +172,16 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  logo: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.small,
+  },
   content: {
     paddingVertical: Spacing.three,
     gap: Spacing.four,

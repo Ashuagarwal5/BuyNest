@@ -8,7 +8,7 @@ import {
 import { asObject } from '@/services/api/parse';
 
 type RequestOptions<T> = {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   /** Sent as JSON. */
   body?: unknown;
   headers?: Record<string, string>;

@@ -18,6 +18,8 @@ export const StorageKeys = {
   /** v1 kept only an id and a fingerprint, so it could not be replayed. Removed on load. */
   legacyPendingOrder: 'buynest:pending-order:v1',
   checkoutDetails: 'buynest:checkout-details:v1',
+  /** Ids of the products saved to the wishlist, newest first. */
+  wishlist: 'doorkart:wishlist:v1',
   /** Orders created on-device before the backend existed. Read-only; never sent anywhere. */
   legacyLocalOrders: 'buynest:orders:v1',
 } as const;

@@ -1,0 +1,61 @@
+name: buynest
+
+services:
+  db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: buynest
+      POSTGRES_USER: buynest
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-buynest-local}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buynest -d buynest"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./Backend
+    restart: unless-stopped
+    init: true
+    environment:
+      DATABASE_URL: postgresql://buynest:${POSTGRES_PASSWORD:-buynest-local}@db:5432/buynest
+      # Local HTTP login needs non-secure cookies. Use production with HTTPS.
+      NODE_ENV: ${BACKEND_NODE_ENV:-development}
+      PORT: 4000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      UPLOAD_DIR: /app/uploads
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+    ports:
+      - "4000:4000"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "npm run prisma:deploy -- --config prisma7.config.ts && exec node dist/server.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./Admin/Frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads:

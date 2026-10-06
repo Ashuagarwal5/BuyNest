@@ -1,4 +1,4 @@
-# BuyNest
+# DoorKart
 
 Local ecommerce for a single shop: stationery, gifts, toys, sports and decoration items,
 delivered locally with Cash on Delivery.
@@ -12,6 +12,51 @@ delivered locally with Cash on Delivery.
 `CLAUDE.md` holds the project's working instructions.
 
 ## Running it locally
+
+### Docker (API, admin frontend, and database)
+
+Install Docker with Compose, then run from the repository root:
+
+```bash
+docker compose up --build -d
+```
+
+The admin panel is at http://localhost:3000 and the API is at
+http://localhost:4000 (`/health` checks the API and database). PostgreSQL runs only
+inside Docker and has no host port. Migrations run automatically before the API
+starts. Database data and uploaded media persist in named Docker volumes.
+
+Load the optional sample catalogue:
+
+```bash
+docker compose exec backend npm run prisma:seed -- --config prisma7.config.ts
+```
+
+Create the first admin with your own email, name, and password (at least 10 characters):
+
+```bash
+docker compose exec -e ADMIN_SEED_EMAIL=owner@example.com -e ADMIN_SEED_NAME=Owner -e ADMIN_SEED_PASSWORD="your-long-passphrase" backend npm run admin:create
+```
+
+View logs with `docker compose logs -f`; stop with `docker compose down`. Stopping
+keeps data. `docker compose down -v` permanently deletes the database and uploads.
+
+Optional settings are in `.env.docker.example`; copy it to `.env` in the repository
+root to override them. The Compose database connection overrides `Backend/.env`,
+and local environment files are excluded from Docker images. Changing the database
+password after the volume is initialized requires updating the PostgreSQL role's
+password too; changing the environment alone does not update existing credentials.
+
+The default Compose setup is for local HTTP use. For deployment behind HTTPS,
+set `BACKEND_NODE_ENV=production`, a strong URL-safe `POSTGRES_PASSWORD`, your admin
+origin in `CORS_ORIGINS`, and the browser-accessible HTTPS API origin in
+`NEXT_PUBLIC_API_BASE_URL`. Set `TRUST_PROXY_HOPS` to match your reverse proxy setup.
+Rebuild the frontend after changing its API URL; Next.js embeds it during the build.
+
+The Expo mobile app still runs separately using the instructions below and connects
+to the Docker API through port 4000. Do not start `npm run db:dev` for this setup.
+
+### Without Docker
 
 These run together. Start them in separate terminals.
 

@@ -1,5 +1,5 @@
 /**
- * BuyNest design tokens. Components should read colors through `useTheme()` and use the
+ * DoorKart design tokens. Components should read colors through `useTheme()` and use the
  * spacing / radius / typography scales below instead of hardcoding values.
  */
 
@@ -9,30 +9,30 @@ import { Platform, type TextStyle } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#14201D',
-    textSecondary: '#5B6B66',
+    text: '#0F1B33',
+    textSecondary: '#55627A',
     textOnPrimary: '#FFFFFF',
-    background: '#F6F8F7',
+    background: '#F5F7FB',
     surface: '#FFFFFF',
-    border: '#E1E7E4',
-    primary: '#0F766E',
-    primarySoft: '#D9F0EC',
-    accent: '#D97706',
-    accentSoft: '#FEF3C7',
+    border: '#E1E6F0',
+    primary: '#0B57C9',
+    primarySoft: '#DCE9FB',
+    accent: '#EA580C',
+    accentSoft: '#FFEDD5',
     success: '#15803D',
     danger: '#B91C1C',
   },
   dark: {
-    text: '#F1F5F4',
-    textSecondary: '#A3B3AE',
-    textOnPrimary: '#06201D',
-    background: '#0C1413',
-    surface: '#16211F',
-    border: '#26332F',
-    primary: '#2DD4BF',
-    primarySoft: '#123B36',
-    accent: '#FBBF24',
-    accentSoft: '#3B2F0B',
+    text: '#EEF3FC',
+    textSecondary: '#A0AFCB',
+    textOnPrimary: '#06142E',
+    background: '#0A1020',
+    surface: '#121A2E',
+    border: '#223052',
+    primary: '#6CAEFF',
+    primarySoft: '#12294F',
+    accent: '#FB923C',
+    accentSoft: '#3A230C',
     success: '#4ADE80',
     danger: '#F87171',
   },

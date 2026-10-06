@@ -13,6 +13,8 @@ import type { DeliveryArea } from '@/types/delivery';
 
 /** The API's page-size ceiling; the app's lists are small enough to load in one page. */
 const MAX_PAGE_SIZE = 50;
+/** Products per page in the scrolling lists: enough to fill a screen, small enough to load quickly. */
+const PAGE_SIZE = 20;
 
 function parseCategory(value: unknown): Category {
   const dto = asObject(value);
@@ -69,7 +71,7 @@ export function fetchCategories(signal?: AbortSignal): Promise<Category[]> {
   return apiRequest('/categories', { signal, parse: (data) => asArray(data, parseCategory) });
 }
 
-type ProductFilter = {
+export type ProductFilter = {
   categorySlug?: string;
   featured?: boolean;
   isNew?: boolean;
@@ -77,8 +79,8 @@ type ProductFilter = {
   search?: string;
 };
 
-export function fetchProducts(filter: ProductFilter, signal?: AbortSignal): Promise<Product[]> {
-  const query = new URLSearchParams({ limit: String(MAX_PAGE_SIZE) });
+function productQuery(filter: ProductFilter, page: number, limit: number): string {
+  const query = new URLSearchParams({ limit: String(limit), page: String(page) });
   if (filter.categorySlug) {
     query.set('category', filter.categorySlug);
   }
@@ -91,7 +93,39 @@ export function fetchProducts(filter: ProductFilter, signal?: AbortSignal): Prom
   if (filter.isNew) {
     query.set('new', 'true');
   }
+  return query.toString();
+}
 
+export function fetchProducts(filter: ProductFilter, signal?: AbortSignal): Promise<Product[]> {
+  return apiRequest(`/products?${productQuery(filter, 1, MAX_PAGE_SIZE)}`, {
+    signal,
+    parse: (data) => asArray(asObject(data).items, parseProduct),
+  });
+}
+
+export type ProductPage = { items: Product[]; hasMore: boolean };
+
+/** One page of a long list. The list screens ask for the next page as the customer scrolls. */
+export function fetchProductPage(filter: ProductFilter, page: number, signal?: AbortSignal): Promise<ProductPage> {
+  return apiRequest(`/products?${productQuery(filter, page, PAGE_SIZE)}`, {
+    signal,
+    parse: (data) => {
+      const dto = asObject(data);
+      const pagination = asObject(dto.pagination);
+      return {
+        items: asArray(dto.items, parseProduct),
+        hasMore: asInteger(pagination.page) < asInteger(pagination.totalPages),
+      };
+    },
+  });
+}
+
+/** Exactly these products (at most 50), as they are now. Unknown or unavailable ids are left out. */
+export function fetchProductsByIds(ids: string[], signal?: AbortSignal): Promise<Product[]> {
+  if (ids.length === 0) {
+    return Promise.resolve([]);
+  }
+  const query = new URLSearchParams({ ids: ids.join(','), limit: String(MAX_PAGE_SIZE) });
   return apiRequest(`/products?${query.toString()}`, {
     signal,
     parse: (data) => asArray(asObject(data).items, parseProduct),

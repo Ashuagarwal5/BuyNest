@@ -1,4 +1,4 @@
-# BuyNest Roadmap
+# DoorKart Roadmap
 
 Where the project stands and what is left to run the shop on it. Written 5 Oct 2026 from the
 actual state of the code. `CLAUDE.md` still holds the working rules; this file is the plan.

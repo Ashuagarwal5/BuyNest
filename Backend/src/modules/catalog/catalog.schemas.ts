@@ -11,6 +11,17 @@ export const listProductsQuerySchema = z.object({
   /** Category slug. */
   category: z.string().trim().min(1).max(100).optional(),
   featured: booleanFlag.optional(),
+  /**
+   * Comma-separated product ids: fetches exactly those products (the app's wishlist uses it).
+   * Inactive or unknown ids are simply left out of the answer.
+   */
+  ids: z
+    .string()
+    .trim()
+    .max(5000)
+    .transform((value) => [...new Set(value.split(',').map((id) => id.trim()).filter(Boolean))])
+    .pipe(z.array(z.string().max(100)).min(1).max(MAX_PAGE_SIZE))
+    .optional(),
   new: booleanFlag.optional(),
   search: z
     .string()

@@ -99,7 +99,7 @@ export function OrdersScreen() {
                 {legacyLocalOrderCount === 1 ? 'order is' : 'orders are'} saved on this device
               </AppText>
               <AppText variant="caption" color="textSecondary">
-                They were created before BuyNest went online and were never sent to the shop,
+                They were created before DoorKart went online and were never sent to the shop,
                 so they are not shown above.
               </AppText>
               <PrimaryButton

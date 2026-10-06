@@ -90,6 +90,27 @@ describe('GET /api/v1/products', () => {
     expect(names(search.body)).toEqual(['Classmate Notebook']);
   });
 
+  it('fetches exactly the products asked for by id, leaving out unknown and inactive ones', async () => {
+    const { notebook, pencil, inactive } = fixtures.products;
+
+    const response = await request(app).get(
+      `/api/v1/products?ids=${notebook.id},${pencil.id},${inactive.id},no-such-id,${notebook.id}`
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.items.map((item: { id: string }) => item.id).sort()).toEqual(
+      [notebook.id, pencil.id].sort()
+    );
+    expect(response.body.data.pagination.total).toBe(2);
+  });
+
+  it('refuses an empty ids list and too many ids', async () => {
+    expect((await request(app).get('/api/v1/products?ids=')).status).toBe(400);
+    expect((await request(app).get('/api/v1/products?ids=,,,')).status).toBe(400);
+    const tooMany = Array.from({ length: 51 }, (_, index) => `id${index}`).join(',');
+    expect((await request(app).get(`/api/v1/products?ids=${tooMany}`)).status).toBe(400);
+  });
+
   it('rejects invalid query values with a validation error', async () => {
     const response = await request(app).get('/api/v1/products?limit=1000&featured=yes');
 

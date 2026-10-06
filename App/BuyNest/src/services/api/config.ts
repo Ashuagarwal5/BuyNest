@@ -1,5 +1,5 @@
 /**
- * The one place the app learns where the BuyNest API lives.
+ * The one place the app learns where the DoorKart API lives.
  *
  * Set EXPO_PUBLIC_API_BASE_URL in `.env.local` (see `.env.example`). On a physical phone
  * it must be the development computer's LAN address, because `localhost` on a phone is

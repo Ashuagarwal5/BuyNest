@@ -26,10 +26,7 @@ export default function TabsLayout() {
         name="index"
         options={{ title: 'Home', headerShown: false, tabBarIcon: tabIcon('home') }}
       />
-      <Tabs.Screen
-        name="categories"
-        options={{ title: 'Categories', tabBarIcon: tabIcon('categories') }}
-      />
+      <Tabs.Screen name="products" options={{ title: 'Products', tabBarIcon: tabIcon('store') }} />
       <Tabs.Screen
         name="cart"
         options={{

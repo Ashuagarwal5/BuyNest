@@ -8,12 +8,14 @@ import type { Product } from '@/types/catalog';
 type ProductRailProps = {
   title: string;
   products: Product[];
+  /** Shows a "View all" button on the right of the title when given. */
+  onViewAll?: () => void;
 };
 
 const CARD_WIDTH = 164;
 
 /** Titled horizontal list of product cards. Renders nothing when there are no products. */
-export function ProductRail({ title, products }: ProductRailProps) {
+export function ProductRail({ title, products, onViewAll }: ProductRailProps) {
   if (products.length === 0) {
     return null;
   }
@@ -21,7 +23,7 @@ export function ProductRail({ title, products }: ProductRailProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <SectionHeader title={title} />
+        <SectionHeader title={title} actionLabel="View all" onAction={onViewAll} />
       </View>
       <FlatList
         horizontal

@@ -1,6 +1,6 @@
-# BuyNest — Master Project Instructions
+# DoorKart — Master Project Instructions
 
-You are the senior software architect and lead full-stack engineer for my project, BuyNest.
+You are the senior software architect and lead full-stack engineer for my project, DoorKart.
 
 Your job is not just to generate code. You must understand the existing repository, maintain a clean architecture, avoid unnecessary complexity, and build the application incrementally as a production-quality ecommerce system.
 
@@ -21,9 +21,9 @@ If something can be reasonably decided from the project context, make the decisi
 
 # PROJECT NAME
 
-BuyNest
+DoorKart
 
-BuyNest is initially a local ecommerce application for my own shop.
+DoorKart is initially a local ecommerce application for my own shop.
 
 Initially I will sell:
 
@@ -44,7 +44,7 @@ The initial business model is intentionally simple.
 Currently:
 
 - I operate in a local area.
-- Customers order products from BuyNest.
+- Customers order products from DoorKart.
 - I personally deliver the products.
 - Payments are currently Cash on Delivery only.
 - I manage my own inventory.
@@ -114,7 +114,7 @@ The MVP should optimize this workflow before adding advanced ecommerce features.
 
 The project currently lives around:
 
-C:\Ashu\projects\BuyNest
+C:\Ashu\projects\DoorKart
 
 There are currently folders such as:
 
@@ -132,7 +132,7 @@ npx create-expo-app@latest
 
 App name:
 
-BuyNest
+DoorKart
 
 Expo SDK:
 
@@ -272,7 +272,7 @@ Keep business logic in the backend instead of duplicating important logic inside
 
 # MOBILE APP DESIGN
 
-The BuyNest customer application should feel like a modern ecommerce application but should NOT attempt to copy Amazon, Flipkart, or Meesho feature-for-feature.
+The DoorKart customer application should feel like a modern ecommerce application but should NOT attempt to copy Amazon, Flipkart, or Meesho feature-for-feature.
 
 Design style:
 
@@ -958,7 +958,7 @@ Shadows
 
 Avoid repeating random hex values throughout components.
 
-Support consistent UI throughout BuyNest.
+Support consistent UI throughout DoorKart.
 
 Avoid excessive gradients and visual clutter.
 
@@ -1200,12 +1200,12 @@ First:
 5. Fix the issue safely.
 6. Clean the starter application without breaking Expo Router.
 7. Establish the appropriate React Native project structure.
-8. Get a clean working BuyNest starter screen.
+8. Get a clean working DoorKart starter screen.
 
 Do not start implementing dozens of screens before the development environment is stable.
 
-Once the project is stable, propose the folder architecture for the BuyNest mobile application and wait for or proceed with the next requested feature.
+Once the project is stable, propose the folder architecture for the DoorKart mobile application and wait for or proceed with the next requested feature.
 
 Remember:
 
-Build BuyNest for today's local shop workflow while keeping the architecture ready for tomorrow's larger ecommerce business.
+Build DoorKart for today's local shop workflow while keeping the architecture ready for tomorrow's larger ecommerce business.

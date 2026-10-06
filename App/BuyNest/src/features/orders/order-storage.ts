@@ -16,8 +16,8 @@ import type { TrackedOrder } from '@/types/order';
 
 const SCHEMA_VERSION = 1;
 
-/** The server's order number format: BN-YYYYMMDD-NNNN. */
-const ORDER_NUMBER_PATTERN = /^BN-\d{8}-\d{4,}$/;
+/** The server's order number format: DK-YYYYMMDD-NNNN (BN- for orders placed before the rename). */
+const ORDER_NUMBER_PATTERN = /^(DK|BN)-\d{8}-\d{4,}$/;
 
 function isTrackedOrder(value: unknown): value is TrackedOrder {
   if (typeof value !== 'object' || value === null) {

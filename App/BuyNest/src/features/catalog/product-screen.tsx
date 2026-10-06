@@ -11,6 +11,7 @@ import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { Screen } from '@/components/ui/screen';
 import { type ThemeColor, Spacing } from '@/constants/theme';
 import { useCart } from '@/features/cart/cart-context';
+import { WishlistButton } from '@/features/wishlist/components/wishlist-button';
 import { PriceDisplay } from '@/features/catalog/components/price-display';
 import { ProductGallery } from '@/features/catalog/components/product-gallery';
 import { useApiData } from '@/hooks/use-api-data';
@@ -114,7 +115,12 @@ function ProductDetails({ product, isRefreshing, onRefresh }: ProductDetailsProp
           <AppText variant="captionStrong" color="primary">
             {product.categoryName}
           </AppText>
-          <AppText variant="heading">{product.name}</AppText>
+          <View style={styles.titleRow}>
+            <AppText variant="heading" style={styles.title}>
+              {product.name}
+            </AppText>
+            <WishlistButton productId={product.id} productName={product.name} />
+          </View>
           <PriceDisplay sellingPrice={product.sellingPrice} mrp={product.mrp} size="large" />
           <AppText variant="captionStrong" color={stockStatus.color}>
             {stockStatus.label}
@@ -172,6 +178,15 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.three,
     gap: Spacing.four,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  title: {
+    flex: 1,
   },
   section: {
     gap: Spacing.two,

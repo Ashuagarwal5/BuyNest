@@ -62,7 +62,7 @@ export function SearchScreen() {
       {term.length < MIN_SEARCH_LENGTH ? (
         <EmptyState
           icon="search"
-          title="Search BuyNest"
+          title="Search DoorKart"
           message={
             typed.length === 0
               ? 'Find stationery, gifts, toys, sports and decoration items.'

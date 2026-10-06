@@ -25,6 +25,10 @@ type ServerErrorCode =
   | 'INVALID_TRACKING_TOKEN'
   | 'ORDER_CANNOT_BE_CANCELLED'
   | 'IDEMPOTENCY_CONFLICT'
+  | 'UNAUTHENTICATED'
+  | 'INVALID_OTP'
+  | 'INVALID_GOOGLE_TOKEN'
+  | 'TOO_MANY_REQUESTS'
   | 'SERVICE_UNAVAILABLE'
   | 'INTERNAL_ERROR';
 
@@ -45,6 +49,10 @@ const KNOWN_SERVER_CODES: ServerErrorCode[] = [
   'INVALID_TRACKING_TOKEN',
   'ORDER_CANNOT_BE_CANCELLED',
   'IDEMPOTENCY_CONFLICT',
+  'UNAUTHENTICATED',
+  'INVALID_OTP',
+  'INVALID_GOOGLE_TOKEN',
+  'TOO_MANY_REQUESTS',
   'SERVICE_UNAVAILABLE',
   'INTERNAL_ERROR',
 ];
@@ -64,13 +72,16 @@ const SHOW_SERVER_MESSAGE: ApiErrorCode[] = [
   'OUT_OF_STOCK',
   'PRODUCT_UNAVAILABLE',
   'DELIVERY_AREA_UNAVAILABLE',
+  // Written for customers by the server: "wait 40 seconds", "that code is not correct".
+  'INVALID_OTP',
+  'TOO_MANY_REQUESTS',
 ];
 
 const MESSAGES: Record<ApiErrorCode, string> = {
-  NETWORK_ERROR: 'Could not reach BuyNest. Check your internet connection and try again.',
+  NETWORK_ERROR: 'Could not reach DoorKart. Check your internet connection and try again.',
   TIMEOUT: 'The request took too long. Please try again.',
-  SERVER_ERROR: 'BuyNest is having trouble right now. Please try again shortly.',
-  MALFORMED_RESPONSE: 'BuyNest sent an unexpected response. Please try again.',
+  SERVER_ERROR: 'DoorKart is having trouble right now. Please try again shortly.',
+  MALFORMED_RESPONSE: 'DoorKart sent an unexpected response. Please try again.',
   CONFIGURATION_ERROR: 'The app is not set up correctly. Please update or reinstall it.',
   STORAGE_ERROR:
     'Your phone could not save this order. Free up some storage space and try again.',
@@ -88,7 +99,11 @@ const MESSAGES: Record<ApiErrorCode, string> = {
   INVALID_TRACKING_TOKEN: 'This order cannot be opened from this device.',
   ORDER_CANNOT_BE_CANCELLED: 'This order can no longer be cancelled.',
   IDEMPOTENCY_CONFLICT: 'This order could not be submitted. Please review your order and try again.',
-  SERVICE_UNAVAILABLE: 'BuyNest is temporarily unavailable. Please try again shortly.',
+  UNAUTHENTICATED: 'Your sign-in has ended. Please sign in again.',
+  INVALID_OTP: 'That code is not correct or has expired.',
+  INVALID_GOOGLE_TOKEN: 'Google sign-in did not work. Please try again.',
+  TOO_MANY_REQUESTS: 'Too many attempts. Please wait a moment and try again.',
+  SERVICE_UNAVAILABLE: 'DoorKart is temporarily unavailable. Please try again shortly.',
   INTERNAL_ERROR: 'Something went wrong on our side. Please try again.',
   UNKNOWN_ERROR: 'Something went wrong. Please try again.',
 };

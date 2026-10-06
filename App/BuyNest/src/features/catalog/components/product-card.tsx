@@ -6,6 +6,7 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { Radius, Shadows, Spacing } from '@/constants/theme';
 import { useCart } from '@/features/cart/cart-context';
+import { WishlistButton } from '@/features/wishlist/components/wishlist-button';
 import { PriceDisplay } from '@/features/catalog/components/price-display';
 import { ProductImage } from '@/features/catalog/components/product-image';
 import { useTheme } from '@/hooks/use-theme';
@@ -24,7 +25,8 @@ export function ProductCard({ product, style }: ProductCardProps) {
 
   return (
     <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }, style]}>
-      {/* The cart controls sit outside the link so tapping them never opens the product. */}
+      {/* The heart and the cart controls sit outside the link so tapping them never opens the product. */}
+      <WishlistButton productId={product.id} productName={product.name} style={styles.heart} />
       <Link href={{ pathname: '/product/[id]', params: { id: product.id } }} asChild>
         <Pressable accessibilityLabel={product.name} style={styles.details}>
           <ProductImage product={product} style={styles.image} />
@@ -72,6 +74,13 @@ const styles = StyleSheet.create({
   },
   details: {
     gap: Spacing.one,
+  },
+  // Over the top-right corner of the picture, inside the card's padding.
+  heart: {
+    position: 'absolute',
+    top: Spacing.three,
+    right: Spacing.three,
+    zIndex: 1,
   },
   image: {
     aspectRatio: 4 / 3,

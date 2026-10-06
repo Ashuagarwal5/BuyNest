@@ -56,6 +56,7 @@ export async function listProducts(query: ListProductsQuery) {
   const where: Prisma.ProductWhereInput = {
     ...activeProductWhere,
     ...(query.category ? { category: { isActive: true, slug: query.category } } : {}),
+    ...(query.ids ? { id: { in: query.ids } } : {}),
     ...(query.featured === undefined ? {} : { isFeatured: query.featured }),
     ...(query.new === undefined ? {} : { isNew: query.new }),
     ...(query.search
