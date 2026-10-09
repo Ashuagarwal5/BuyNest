@@ -1,4 +1,11 @@
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -21,10 +28,20 @@ type ProductGridProps = {
   filter: ProductFilter;
   emptyTitle: string;
   emptyMessage: string;
+  /** A button on the empty state, for example "Clear filters". */
+  emptyActionLabel?: string;
+  onEmptyAction?: () => void;
 };
 
 /** Two-column product list with pull-to-refresh and loading as you scroll. */
-export function ProductGrid({ listKey, filter, emptyTitle, emptyMessage }: ProductGridProps) {
+export function ProductGrid({
+  listKey,
+  filter,
+  emptyTitle,
+  emptyMessage,
+  emptyActionLabel,
+  onEmptyAction,
+}: ProductGridProps) {
   const theme = useTheme();
   const list = useProductPages(listKey, filter);
 
@@ -51,7 +68,15 @@ export function ProductGrid({ listKey, filter, emptyTitle, emptyMessage }: Produ
           colors={[theme.primary]}
         />
       }
-      ListEmptyComponent={<EmptyState icon="store" title={emptyTitle} message={emptyMessage} />}
+      ListEmptyComponent={
+        <EmptyState
+          icon="store"
+          title={emptyTitle}
+          message={emptyMessage}
+          actionLabel={emptyActionLabel}
+          onAction={onEmptyAction}
+        />
+      }
       ListFooterComponent={
         list.isLoadingMore ? (
           <ActivityIndicator color={theme.primary} style={styles.footer} />

@@ -12,7 +12,7 @@ type ProductRailProps = {
   onViewAll?: () => void;
 };
 
-const CARD_WIDTH = 164;
+const CARD_WIDTH = 176;
 
 /** Titled horizontal list of product cards. Renders nothing when there are no products. */
 export function ProductRail({ title, products, onViewAll }: ProductRailProps) {

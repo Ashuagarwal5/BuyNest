@@ -39,3 +39,11 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Git ownership and safety
+
+- This mobile app belongs to the BuyNest root Git repository, not a separate mobile repository. Read the root `AGENTS.md` section "Git Repository, Branch and Commit Safety" before Git work.
+- Before editing, verify the root repository, current branch, HEAD, Git status, and existing diffs. Preserve all existing work.
+- Root also tracks backend/admin files managed by independent nested repositories. Check overlap before any proposed commit or branch operation; do not stage unrelated component changes or silently synchronize tracking.
+- Branch operations, staging, commits (including on `main`), and pushes require specific approval; push approval is separate. Never use blanket staging or automatically stash, reset, clean, merge, rebase, or force-push. Preserve repository structure and tracking.
+- Before commit approval, show repository, branch, exact files/hunks, message, test results, excluded work, and overlapping-root impact. Ask: "Do you approve staging and committing ONLY these changes?" Wait for explicit approval.

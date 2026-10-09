@@ -20,6 +20,8 @@ export const StorageKeys = {
   checkoutDetails: 'buynest:checkout-details:v1',
   /** Ids of the products saved to the wishlist, newest first. */
   wishlist: 'doorkart:wishlist:v1',
+  /** The customer's saved delivery addresses. */
+  addresses: 'doorkart:addresses:v1',
   /** Orders created on-device before the backend existed. Read-only; never sent anywhere. */
   legacyLocalOrders: 'buynest:orders:v1',
 } as const;

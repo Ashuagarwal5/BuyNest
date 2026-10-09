@@ -8,32 +8,62 @@ import { Screen } from '@/components/ui/screen';
 import { Radius, Spacing } from '@/constants/theme';
 import { AccountCard } from '@/features/account/components/account-card';
 import { ConnectionCheck } from '@/features/account/components/connection-check';
+import { useAddresses } from '@/features/addresses/addresses-context';
 import { useWishlist } from '@/features/wishlist/wishlist-context';
 import { useTheme } from '@/hooks/use-theme';
 
-type AccountOption = {
-  icon: IconName;
-  title: string;
-  detail: string;
-};
-
 const appVersion = Constants.expoConfig?.version;
 
-// These are not tappable yet: each one needs customer login or a screen that does not exist.
-const OPTIONS: AccountOption[] = [
-  { icon: 'location', title: 'Saved Addresses', detail: 'Coming soon' },
-  { icon: 'help', title: 'Help & Support', detail: 'Coming soon' },
-  {
-    icon: 'info',
-    title: 'About DoorKart',
-    detail: appVersion ? `Version ${appVersion}` : 'Your local shop, online',
-  },
-];
+type AccountRow = {
+  key: string;
+  /** An icon, or null to show the red heart. */
+  icon: IconName | null;
+  title: string;
+  detail: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+};
 
 export function AccountScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { count: wishlistCount } = useWishlist();
+  const { addresses } = useAddresses();
+
+  const rows: AccountRow[] = [
+    {
+      key: 'wishlist',
+      icon: null,
+      title: 'My Wishlist',
+      detail: wishlistCount === 0 ? 'Nothing saved' : `${wishlistCount} saved`,
+      accessibilityLabel: `My Wishlist, ${wishlistCount} saved`,
+      onPress: () => router.push('/wishlist'),
+    },
+    {
+      key: 'addresses',
+      icon: 'location',
+      title: 'Saved Addresses',
+      detail: addresses.length === 0 ? 'None saved' : `${addresses.length} saved`,
+      accessibilityLabel: `Saved Addresses, ${addresses.length} saved`,
+      onPress: () => router.push('/addresses'),
+    },
+    {
+      key: 'help',
+      icon: 'help',
+      title: 'Help & Support',
+      detail: 'Contact the shop',
+      accessibilityLabel: 'Help and Support',
+      onPress: () => router.push('/help'),
+    },
+    {
+      key: 'about',
+      icon: 'info',
+      title: 'About DoorKart',
+      detail: appVersion ? `Version ${appVersion}` : 'Your local shop, online',
+      accessibilityLabel: 'About DoorKart',
+      onPress: () => router.push('/about'),
+    },
+  ];
 
   return (
     <Screen edges={['left', 'right']}>
@@ -41,35 +71,35 @@ export function AccountScreen() {
         <AccountCard />
 
         <View style={[styles.list, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`My Wishlist, ${wishlistCount} saved`}
-            onPress={() => router.push('/wishlist')}
-            style={({ pressed }) => [styles.option, pressed && styles.pressed]}>
-            <AppText style={[styles.heart, { color: theme.danger }]}>♥</AppText>
-            <AppText style={styles.optionTitle}>My Wishlist</AppText>
-            <AppText variant="caption" color="textSecondary">
-              {wishlistCount === 0 ? 'Nothing saved' : `${wishlistCount} saved`}
-            </AppText>
-          </Pressable>
-
-          {OPTIONS.map((option) => (
-            <View
-              key={option.title}
-              style={[
+          {rows.map((row, index) => (
+            <Pressable
+              key={row.key}
+              accessibilityRole="button"
+              accessibilityLabel={row.accessibilityLabel}
+              onPress={row.onPress}
+              style={({ pressed }) => [
                 styles.option,
-                { borderTopWidth: StyleSheet.hairlineWidth, borderColor: theme.border },
+                index > 0 && {
+                  borderTopWidth: StyleSheet.hairlineWidth,
+                  borderColor: theme.border,
+                },
+                pressed && styles.pressed,
               ]}>
-              <Icon name={option.icon} size={24} color="primary" />
-              <AppText style={styles.optionTitle}>{option.title}</AppText>
+              {row.icon ? (
+                <Icon name={row.icon} size={24} color="primary" />
+              ) : (
+                <AppText style={[styles.heart, { color: theme.danger }]}>♥</AppText>
+              )}
+              <AppText style={styles.optionTitle}>{row.title}</AppText>
               <AppText variant="caption" color="textSecondary">
-                {option.detail}
+                {row.detail}
               </AppText>
-            </View>
+            </Pressable>
           ))}
         </View>
 
-        <ConnectionCheck />
+        {/* A troubleshooting tool for whoever sets the app up, not something customers need. */}
+        {__DEV__ ? <ConnectionCheck /> : null}
       </ScrollView>
     </Screen>
   );
@@ -89,6 +119,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.three,
+    minHeight: 56,
   },
   optionTitle: {
     flex: 1,

@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -12,6 +12,13 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
 import { SectionCard } from '@/components/ui/section-card';
 import { Spacing } from '@/constants/theme';
+import {
+  isSameAddress,
+  MAX_SAVED_ADDRESSES,
+  type SavedAddress,
+  toCheckoutDetails,
+} from '@/features/addresses/address-types';
+import { useAddresses } from '@/features/addresses/addresses-context';
 import { useCart } from '@/features/cart/cart-context';
 import {
   type CheckoutDetails,
@@ -26,6 +33,7 @@ import { loadSavedCheckoutDetails, saveCheckoutDetails } from '@/features/checko
 import { AddressForm } from '@/features/checkout/components/address-form';
 import { DeliveryAreaSelector } from '@/features/checkout/components/delivery-area-selector';
 import { PaymentMethodSection } from '@/features/checkout/components/payment-method-section';
+import { SavedAddressPicker } from '@/features/checkout/components/saved-address-picker';
 import { OrderItemRow } from '@/features/orders/components/order-item-row';
 import { UnconfirmedOrderNotice } from '@/features/orders/components/unconfirmed-order-notice';
 import { useOrders } from '@/features/orders/order-context';
@@ -75,19 +83,24 @@ export function CheckoutScreen() {
   const { lines, subtotal, isHydrated, clearIfMatches, refreshProducts } = useCart();
   const { submitOrder, pending, pendingReady, isSubmitting } = useOrders();
   const areaList = useApiData('delivery-areas', fetchDeliveryAreas);
+  const { addresses, isHydrated: addressesReady, add: addAddress } = useAddresses();
 
   const [details, setDetails] = useState<CheckoutDetails>(emptyCheckoutDetails);
   const [touched, setTouched] = useState<Partial<Record<CheckoutField, boolean>>>({});
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // The saved address in use, or null while the customer types a different one.
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [saveForLater, setSaveForLater] = useState(true);
 
   const scrollRef = useRef<ScrollView>(null);
   const hasEdited = useRef(false);
+  const hasAppliedDefault = useRef(false);
 
   useEffect(() => {
     let isActive = true;
     loadSavedCheckoutDetails().then((saved) => {
-      if (isActive && saved && !hasEdited.current) {
+      if (isActive && saved && !hasEdited.current && !hasAppliedDefault.current) {
         setDetails(saved);
       }
     });
@@ -95,6 +108,21 @@ export function CheckoutScreen() {
       isActive = false;
     };
   }, []);
+
+  // Once the saved addresses are read, start from the default one (unless the customer has begun typing).
+  const applyDefaultAddress = useEffectEvent(() => {
+    const preferred = addresses.find((address) => address.isDefault);
+    if (preferred && !hasEdited.current) {
+      hasAppliedDefault.current = true;
+      setDetails(toCheckoutDetails(preferred));
+      setSelectedAddressId(preferred.id);
+    }
+  });
+  useEffect(() => {
+    if (addressesReady) {
+      applyDefaultAddress();
+    }
+  }, [addressesReady]);
 
   // The summary below is an estimate, so start it from current prices and stock.
   const refreshCart = useEffectEvent(() => {
@@ -161,8 +189,24 @@ export function CheckoutScreen() {
 
   const updateDetails = (changes: Partial<CheckoutDetails>) => {
     hasEdited.current = true;
+    // Typing over a saved address makes it a different address.
+    setSelectedAddressId(null);
     setSubmitError(null);
     setDetails((current) => ({ ...current, ...changes }));
+  };
+
+  const selectSavedAddress = (address: SavedAddress) => {
+    hasEdited.current = true;
+    setSubmitError(null);
+    setDetails(toCheckoutDetails(address));
+    setSelectedAddressId(address.id);
+  };
+
+  const useDifferentAddress = () => {
+    hasEdited.current = true;
+    setSubmitError(null);
+    setSelectedAddressId(null);
+    setDetails({ ...emptyCheckoutDetails, fullName: details.fullName, phone: details.phone });
   };
 
   const selectArea = (area: DeliveryArea) => {
@@ -203,6 +247,21 @@ export function CheckoutScreen() {
     if (result.ok) {
       // Losing the remembered details only costs convenience, so this is not awaited.
       saveCheckoutDetails(details);
+      // A new address the customer chose to keep joins the address book (once, and within the limit).
+      if (
+        saveForLater &&
+        selectedAddressId === null &&
+        addresses.length < MAX_SAVED_ADDRESSES &&
+        !addresses.some((address) => isSameAddress(address, details))
+      ) {
+        addAddress({
+          ...details,
+          phone: mobile,
+          deliveryAreaId: selectedArea.id,
+          label: addresses.length === 0 ? 'Home' : 'Other',
+          isDefault: addresses.length === 0,
+        });
+      }
       // replace, not push: Back from the success screen must never return to this form.
       router.replace({ pathname: '/order-success/[id]', params: { id: result.order.orderNumber } });
       // Only the cart this order was made from is cleared, never a newer one.
@@ -253,6 +312,15 @@ export function CheckoutScreen() {
           contentContainerStyle={styles.content}>
           <UnconfirmedOrderNotice navigation="replace" />
 
+          {addresses.length > 0 ? (
+            <SavedAddressPicker
+              addresses={addresses}
+              selectedId={selectedAddressId}
+              onSelect={selectSavedAddress}
+              onUseDifferent={useDifferentAddress}
+            />
+          ) : null}
+
           <AddressForm
             details={details}
             errors={visibleErrors}
@@ -275,6 +343,23 @@ export function CheckoutScreen() {
               </AppText>
             ) : null}
           </SectionCard>
+
+          {selectedAddressId === null && addresses.length < MAX_SAVED_ADDRESSES ? (
+            <View style={styles.saveRow}>
+              <View style={styles.flex}>
+                <AppText variant="bodyStrong">Save this address for next time</AppText>
+                <AppText variant="caption" color="textSecondary">
+                  Pick it at checkout without typing again.
+                </AppText>
+              </View>
+              <Switch
+                accessibilityLabel="Save this address for next time"
+                value={saveForLater}
+                onValueChange={setSaveForLater}
+                trackColor={{ true: theme.primary, false: theme.border }}
+              />
+            </View>
+          ) : null}
 
           <SectionCard title="Order Summary">
             {lines.map((line) => (
@@ -362,6 +447,12 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.three,
     gap: Spacing.three,
+  },
+  saveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingHorizontal: Spacing.one,
   },
   emptyNotice: {
     padding: Spacing.three,

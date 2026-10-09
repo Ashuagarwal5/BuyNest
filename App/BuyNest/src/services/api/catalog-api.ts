@@ -77,6 +77,12 @@ export type ProductFilter = {
   isNew?: boolean;
   /** Matches product names and descriptions. */
   search?: string;
+  sort?: 'newest' | 'price_asc' | 'price_desc' | 'name_asc';
+  /** Selling price range in paise, both ends included. */
+  minPricePaise?: number;
+  maxPricePaise?: number;
+  /** Only products that can be ordered right now. */
+  inStock?: boolean;
 };
 
 function productQuery(filter: ProductFilter, page: number, limit: number): string {
@@ -92,6 +98,18 @@ function productQuery(filter: ProductFilter, page: number, limit: number): strin
   }
   if (filter.isNew) {
     query.set('new', 'true');
+  }
+  if (filter.sort && filter.sort !== 'newest') {
+    query.set('sort', filter.sort);
+  }
+  if (filter.minPricePaise !== undefined) {
+    query.set('minPrice', String(filter.minPricePaise));
+  }
+  if (filter.maxPricePaise !== undefined) {
+    query.set('maxPrice', String(filter.maxPricePaise));
+  }
+  if (filter.inStock) {
+    query.set('inStock', 'true');
   }
   return query.toString();
 }
@@ -151,6 +169,35 @@ export function checkApiHealth(signal?: AbortSignal): Promise<void> {
     unversioned: true,
     parse: (data) => {
       asString(asObject(data).status);
+    },
+  });
+}
+
+/** The shop's contact details and policy links, set in the admin panel under Settings. */
+export type ShopInfo = {
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  address: string | null;
+  hours: string | null;
+  privacyPolicyUrl: string | null;
+  termsUrl: string | null;
+};
+
+export function fetchShopInfo(signal?: AbortSignal): Promise<ShopInfo> {
+  return apiRequest('/shop', {
+    signal,
+    parse: (data) => {
+      const dto = asObject(data);
+      return {
+        phone: asNullableString(dto.phone),
+        whatsapp: asNullableString(dto.whatsapp),
+        email: asNullableString(dto.email),
+        address: asNullableString(dto.address),
+        hours: asNullableString(dto.hours),
+        privacyPolicyUrl: asNullableString(dto.privacyPolicyUrl),
+        termsUrl: asNullableString(dto.termsUrl),
+      };
     },
   });
 }
