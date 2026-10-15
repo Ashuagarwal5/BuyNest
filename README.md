@@ -53,6 +53,13 @@ origin in `CORS_ORIGINS`, and the browser-accessible HTTPS API origin in
 `NEXT_PUBLIC_API_BASE_URL`. Set `TRUST_PROXY_HOPS` to match your reverse proxy setup.
 Rebuild the frontend after changing its API URL; Next.js embeds it during the build.
 
+Set `SECRETS_KEY` in the same `.env` (create one with `npm run secrets:key` in
+`Backend`). Sign-in codes and secrets saved in the admin panel (email password,
+Firebase key for push notifications) need it. Back up the database volume and the
+`uploads` volume together, for example
+`docker compose exec db pg_dump -U buynest buynest > backup.sql`. Push notification
+setup is described in `Backend/docs/push-notifications-v1.md`.
+
 The Expo mobile app still runs separately using the instructions below and connects
 to the Docker API through port 4000. Do not start `npm run db:dev` for this setup.
 

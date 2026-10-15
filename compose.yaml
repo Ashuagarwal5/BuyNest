@@ -28,6 +28,10 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       UPLOAD_DIR: /app/uploads
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+      ADMIN_SESSION_TTL_HOURS: ${ADMIN_SESSION_TTL_HOURS:-12}
+      # Needed for sign-in codes and for secrets saved in the admin panel (email password,
+      # Firebase key). Create one with `npm run secrets:key` in Backend; keep a private copy.
+      SECRETS_KEY: ${SECRETS_KEY:-}
     ports:
       - "4000:4000"
     volumes:
