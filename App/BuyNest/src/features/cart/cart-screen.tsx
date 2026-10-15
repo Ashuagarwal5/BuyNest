@@ -1,3 +1,4 @@
+import { cartProductKey } from './product-pack';
 import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useEffectEvent } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
@@ -48,7 +49,7 @@ export function CartScreen() {
     <Screen edges={['left', 'right']}>
       <FlatList
         data={lines}
-        keyExtractor={(line) => line.product.id}
+        keyExtractor={(line) => cartProductKey(line.product)}
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.headerBlock}>

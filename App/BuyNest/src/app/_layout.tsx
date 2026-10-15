@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AddressesProvider } from '@/features/addresses/addresses-context';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { CartProvider } from '@/features/cart/cart-context';
+import { NotificationsProvider } from '@/features/notifications/notifications-context';
 import { OrdersProvider } from '@/features/orders/order-context';
 import { WishlistProvider } from '@/features/wishlist/wishlist-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -33,6 +34,7 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
+      <NotificationsProvider>
       <CartProvider>
         <OrdersProvider>
           <WishlistProvider>
@@ -45,8 +47,6 @@ export default function RootLayout() {
                   }}>
                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                   <Stack.Screen name="search" options={{ title: 'Search' }} />
-                  <Stack.Screen name="category/[slug]" options={{ title: 'Category' }} />
-                  <Stack.Screen name="collection/[kind]" options={{ title: 'Products' }} />
                   <Stack.Screen name="product/[id]" options={{ title: '' }} />
                   <Stack.Screen name="checkout/index" options={{ title: 'Checkout' }} />
                   <Stack.Screen
@@ -61,8 +61,15 @@ export default function RootLayout() {
                   />
                   <Stack.Screen name="orders/[id]" options={{ title: 'Order Details' }} />
                   <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
+                  <Stack.Screen name="register" options={{ title: 'Create account' }} />
+                  <Stack.Screen name="profile" options={{ title: 'My profile' }} />
+                  <Stack.Screen name="edit-profile" options={{ title: 'Edit profile' }} />
+                  <Stack.Screen name="account-settings" options={{ title: 'Account settings' }} />
                   <Stack.Screen name="wishlist" options={{ title: 'My Wishlist' }} />
+                  <Stack.Screen name="my-reviews" options={{ title: 'My reviews' }} />
+                  <Stack.Screen name="review/[productId]" options={{ title: 'Your review' }} />
                   <Stack.Screen name="addresses" options={{ title: 'Saved Addresses' }} />
+                  <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
                   <Stack.Screen name="help" options={{ title: 'Help & Support' }} />
                   <Stack.Screen name="about" options={{ title: 'About DoorKart' }} />
                   <Stack.Screen name="address/[id]" options={{ title: 'Address' }} />
@@ -73,6 +80,7 @@ export default function RootLayout() {
           </WishlistProvider>
         </OrdersProvider>
       </CartProvider>
+      </NotificationsProvider>
     </AuthProvider>
   );
 }

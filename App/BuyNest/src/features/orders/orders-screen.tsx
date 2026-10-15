@@ -1,4 +1,4 @@
-import { useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
@@ -18,9 +18,11 @@ const SCREEN_EDGES = ['left', 'right'] as const;
 export function OrdersScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
+  const router = useRouter();
   const {
     index,
-    tracked,
+    visibleOrders,
+    accountHistory,
     legacyLocalOrderCount,
     getDetail,
     reloadIndex,
@@ -49,20 +51,6 @@ export function OrdersScreen() {
     );
   }
 
-  if (index === 'error') {
-    return (
-      <Screen edges={SCREEN_EDGES}>
-        <EmptyState
-          icon="orders"
-          title="Could not load your orders"
-          message="Something went wrong while reading the orders saved on this device."
-          actionLabel="Try again"
-          onAction={reloadIndex}
-        />
-      </Screen>
-    );
-  }
-
   const handlePullRefresh = async () => {
     setIsPullRefreshing(true);
     await refreshAll();
@@ -72,7 +60,7 @@ export function OrdersScreen() {
   return (
     <Screen edges={SCREEN_EDGES}>
       <FlatList
-        data={tracked}
+        data={visibleOrders}
         keyExtractor={(order) => order.orderNumber}
         contentContainerStyle={styles.content}
         refreshControl={
@@ -83,16 +71,49 @@ export function OrdersScreen() {
             colors={[theme.primary]}
           />
         }
-        ListHeaderComponent={<UnconfirmedOrderNotice />}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <UnconfirmedOrderNotice />
+            <AppText variant="caption" color="textSecondary">
+              {accountHistory.active
+                ? 'Orders from your account and orders saved on this device.'
+                : 'Orders saved on this device. Sign in to see purchases made with your account on other devices.'}
+            </AppText>
+            {!accountHistory.active && accountHistory.status !== 'loading' ? (
+              <PrimaryButton title="Sign in" size="small" variant="secondary" onPress={() => router.push('/sign-in')} />
+            ) : null}
+            {accountHistory.status === 'loading' ? <LoadingState /> : null}
+            {accountHistory.error ? (
+              <View style={styles.header}>
+                <AppText color="danger" accessibilityLiveRegion="polite">{accountHistory.error.message}</AppText>
+                <PrimaryButton
+                  title={accountHistory.error.code === 'UNAUTHENTICATED' ? 'Sign in again' : 'Retry account history'}
+                  size="small" variant="secondary"
+                  onPress={() => accountHistory.error?.code === 'UNAUTHENTICATED' ? router.push('/sign-in') : accountHistory.refresh()}
+                />
+              </View>
+            ) : null}
+            {index === 'error' ? (
+              <EmptyState icon="orders" title="Could not read device orders"
+                message="Orders saved on this device could not be read. Try again to load them."
+                actionLabel="Retry device orders" onAction={reloadIndex} />
+            ) : null}
+          </View>
+        }
         ListEmptyComponent={
-          <EmptyState
+          accountHistory.status === 'loading' || accountHistory.error ? null : <EmptyState
             icon="orders"
             title="No orders yet"
             message="Once you place an order, you'll see it here."
           />
         }
         ListFooterComponent={
-          legacyLocalOrderCount > 0 ? (
+          <View style={styles.header}>
+            {accountHistory.hasMore ? (
+              <PrimaryButton title="Load more account orders" size="small" variant="secondary"
+                loading={accountHistory.loadingMore} onPress={accountHistory.loadMore} />
+            ) : null}
+            {legacyLocalOrderCount > 0 ? (
             <View style={[styles.legacy, { backgroundColor: theme.accentSoft }]}>
               <AppText variant="captionStrong">
                 {legacyLocalOrderCount} earlier test{' '}
@@ -109,7 +130,8 @@ export function OrdersScreen() {
                 onPress={removeLegacyLocalOrders}
               />
             </View>
-          ) : null
+            ) : null}
+          </View>
         }
         renderItem={({ item }) => <OrderCard tracked={item} detail={getDetail(item.orderNumber)} />}
       />
@@ -118,6 +140,7 @@ export function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: { gap: Spacing.three },
   content: {
     flexGrow: 1,
     padding: Spacing.three,

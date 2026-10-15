@@ -11,10 +11,11 @@ type ProductImageProps = {
   product: Product;
   iconSize?: number;
   style?: StyleProp<ViewStyle>;
+  contentFit?: 'cover' | 'contain';
 };
 
 /** Primary product image, or a category-icon placeholder while the product has no images. */
-export function ProductImage({ product, iconSize = 40, style }: ProductImageProps) {
+export function ProductImage({ product, iconSize = 40, style, contentFit = 'cover' }: ProductImageProps) {
   const theme = useTheme();
   const primaryImage = product.images[0];
 
@@ -23,7 +24,7 @@ export function ProductImage({ product, iconSize = 40, style }: ProductImageProp
       {primaryImage ? (
         <Image
           source={{ uri: resolveMediaUrl(primaryImage) }}
-          contentFit="cover"
+          contentFit={contentFit}
           accessibilityLabel={product.name}
           style={StyleSheet.absoluteFill}
         />

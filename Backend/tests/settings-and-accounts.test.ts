@@ -71,6 +71,23 @@ describe('secret encryption', () => {
 });
 
 describe('admin settings', () => {
+  it('reports SMTP readiness without exposing credentials and validates authentication limits', async () => {
+    expect((await admin.get(SETTINGS)).body.data.smtpConfigured).toBe(false);
+    await configureEmail();
+    const settings = await admin.get(SETTINGS);
+    expect(settings.body.data.smtpConfigured).toBe(true);
+    expect(settings.body.data.groups.find((group: { id: string }) => group.id === 'signin').title).toBe('Authentication Settings');
+    for (const changes of [
+      { 'auth.otpResendCooldownSeconds': '29' },
+      { 'auth.otpResendCooldownSeconds': '601' },
+      { 'auth.otpMaxAttempts': '0' },
+      { 'auth.otpMaxAttempts': '11' },
+      { 'auth.registrationOtpEnabled': 'yes' },
+    ]) expect((await admin.patch(SETTINGS).send({ changes })).status).toBe(400);
+    await prisma.setting.update({ where: { key: 'smtp.password' }, data: { value: 'unreadable-secret' } });
+    expect((await admin.get(SETTINGS)).body.data.smtpConfigured).toBe(false);
+  });
+
   it('saves values, encrypts secrets in the database, and never returns them', async () => {
     await configureEmail();
 
@@ -361,17 +378,27 @@ describe('Google sign-in', () => {
     expect(await prisma.account.count()).toBe(0);
   });
 
-  it('joins an existing email-code account instead of creating a second one', async () => {
+  it('requires the existing email-code account session before linking Google', async () => {
     await enableGoogle();
-    const existing = await prisma.account.create({ data: { email: 'person@gmail.test' } });
+    await configureEmail();
+    await request(app).post('/api/v1/auth/email-otp/request').send({ email: 'person@gmail.test' });
+    const emailAccount = await request(app).post('/api/v1/auth/email-otp/verify').send({ email: 'person@gmail.test', code: lastCode() });
+    const existingId = emailAccount.body.data.account.id as string;
     setGoogleVerifier(async () => identity);
 
     const response = await request(app).post(GOOGLE).send({ idToken: token });
 
-    expect(response.status).toBe(200);
-    expect(response.body.data.account.id).toBe(existing.id);
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('ACCOUNT_LINK_REQUIRED');
     expect(await prisma.account.count()).toBe(1);
-    expect((await prisma.account.findUniqueOrThrow({ where: { id: existing.id } })).googleSubject).toBe('google-sub-1');
+    expect((await prisma.account.findUniqueOrThrow({ where: { id: existingId } })).googleSubject).toBeNull();
+    const linked = await request(app).post('/api/v1/account/google/link').auth(emailAccount.body.data.token, { type: 'bearer' }).send({ idToken: token });
+    expect(linked.status).toBe(200);
+    expect(linked.body.data.googleLinked).toBe(true);
+    expect((await prisma.account.findUniqueOrThrow({ where: { id: existingId } })).googleSubject).toBe('google-sub-1');
+    const signedIn = await request(app).post(GOOGLE).send({ idToken: token });
+    expect(signedIn.status).toBe(200);
+    expect(signedIn.body.data.account.id).toBe(existingId);
   });
 
   it('recognises a returning Google user even if their Google email changed', async () => {
@@ -431,5 +458,65 @@ describe('customer accounts', () => {
     expect(await prisma.account.count()).toBe(0);
     expect(await prisma.accountSession.count()).toBe(0);
     expect((await request(app).get('/api/v1/account/me').set('Authorization', `Bearer ${token}`)).status).toBe(401);
+  });
+});
+
+describe('shop details', () => {
+  it('shows nothing until the admin fills them in, then shows only what was set', async () => {
+    const empty = await request(app).get('/api/v1/shop');
+    expect(empty.status).toBe(200);
+    expect(empty.body.data).toEqual({
+      name: 'DoorKart',
+      phone: null,
+      whatsapp: null,
+      email: null,
+      address: null,
+      hours: null,
+      privacyPolicyUrl: null,
+      termsUrl: null,
+    });
+
+    const saved = await admin.patch(SETTINGS).send({
+      changes: {
+        'shop.phone': '98765 43210',
+        'shop.email': 'help@example.test',
+        'shop.privacyPolicyUrl': 'https://example.test/privacy',
+      },
+    });
+    expect(saved.status).toBe(200);
+
+    const filled = await request(app).get('/api/v1/shop');
+    expect(filled.body.data).toMatchObject({
+      phone: '98765 43210',
+      email: 'help@example.test',
+      privacyPolicyUrl: 'https://example.test/privacy',
+      whatsapp: null,
+    });
+  });
+
+  it('never exposes anything else, such as the email password', async () => {
+    await configureEmail();
+
+    const response = await request(app).get('/api/v1/shop');
+
+    expect(JSON.stringify(response.body)).not.toMatch(/smtp|password|secret/i);
+  });
+
+  it('refuses a bad phone number and a web address that is not https', async () => {
+    const phone = await admin.patch(SETTINGS).send({ changes: { 'shop.phone': 'call me' } });
+    expect(phone.status).toBe(400);
+    expect(phone.body.error.details[0].field).toBe('shop.phone');
+
+    for (const url of ['http://example.test/privacy', 'javascript:alert(1)', 'example.test/privacy']) {
+      const response = await admin.patch(SETTINGS).send({ changes: { 'shop.termsUrl': url } });
+      expect(response.status, url).toBe(400);
+    }
+  });
+
+  it('can be cleared again', async () => {
+    await admin.patch(SETTINGS).send({ changes: { 'shop.hours': 'Every day, 9 to 9' } });
+    await admin.patch(SETTINGS).send({ changes: { 'shop.hours': null } });
+
+    expect((await request(app).get('/api/v1/shop')).body.data.hours).toBeNull();
   });
 });

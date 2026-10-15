@@ -26,7 +26,7 @@ const LOW_STOCK_AT = 5;
  */
 export function ProductCard({ product, style }: ProductCardProps) {
   const theme = useTheme();
-  const { getQuantity, addItem, increment, decrement } = useCart();
+  const { getQuantity, getAvailableQuantity, addItem, increment, decrement } = useCart();
   const quantityInCart = getQuantity(product.id);
   const isOutOfStock = product.stockQuantity <= 0;
   const discount = getDiscountPercent(product.mrp, product.sellingPrice);
@@ -54,6 +54,7 @@ export function ProductCard({ product, style }: ProductCardProps) {
                   </AppText>
                 </View>
               ) : null}
+              {product.kind === 'COMBO' ? <View style={[styles.tag, {backgroundColor: theme.primary}]}><AppText variant="captionStrong" color="textOnPrimary" style={styles.tagText}>COMBO</AppText></View> : null}
               {product.isNew ? (
                 <View style={[styles.tag, { backgroundColor: theme.primary }]}>
                   <AppText variant="captionStrong" color="textOnPrimary" style={styles.tagText}>
@@ -130,13 +131,14 @@ export function ProductCard({ product, style }: ProductCardProps) {
             quantity={quantityInCart}
             onIncrement={() => increment(product)}
             onDecrement={() => decrement(product)}
-            canIncrement={quantityInCart < product.stockQuantity}
+            canIncrement={getAvailableQuantity(product) > 0}
           />
         ) : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Add ${product.name} to cart`}
             onPress={() => addItem(product)}
+            disabled={getAvailableQuantity(product) <= 0}
             style={({ pressed }) => [
               styles.addButton,
               { backgroundColor: theme.primary, borderColor: theme.primary },
@@ -238,7 +240,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   addButton: {
-    minHeight: 40,
+    minHeight: MinTouchTarget,
     borderRadius: Radius.medium,
     borderWidth: 1,
     flexDirection: 'row',

@@ -25,6 +25,8 @@ import {
   type AddressLabel,
 } from '@/features/addresses/address-types';
 import { useAddresses } from '@/features/addresses/addresses-context';
+import { useAuth } from '@/features/auth/auth-context';
+import { isCheckoutNext } from '@/features/auth/registration-form';
 import {
   type CheckoutErrors,
   type CheckoutField,
@@ -38,18 +40,34 @@ import { DeliveryAreaSelector } from '@/features/checkout/components/delivery-ar
 import { useApiData } from '@/hooks/use-api-data';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchDeliveryAreas } from '@/services/api/catalog-api';
+import { toApiError } from '@/services/api/api-error';
 
 const SCREEN_EDGES = ['left', 'right', 'bottom'] as const;
 
 /** Add a new address, or change a saved one. The route's `id` is "new" or a saved address's id. */
 export function AddressEditorScreen() {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { addresses, isHydrated } = useAddresses();
+  const { addresses, isHydrated, error: addressError, reload } = useAddresses();
+  const { state: auth, continueAsGuest, retrySession } = useAuth();
   const areaList = useApiData('delivery-areas', (signal) => fetchDeliveryAreas(signal));
 
   const isNew = id === 'new';
   const existing = addresses.find((address) => address.id === id);
   const title = isNew ? 'New Address' : 'Edit Address';
+
+  if (auth.status === 'error') return <Screen edges={SCREEN_EDGES}><ErrorState error={auth.error} onRetry={retrySession} /></Screen>;
+
+  if (auth.status === 'signedOut' && auth.reason === 'expired') {
+    return (
+      <Screen edges={SCREEN_EDGES}>
+        <Stack.Screen options={{ title }} />
+        <EmptyState icon="location" title="Sign in again" message="Your session ended. Sign in before changing your account addresses."
+          actionLabel="Sign in" onAction={() => router.push('/sign-in')} />
+        <View style={styles.footer}><PrimaryButton title="Continue as guest" onPress={continueAsGuest} /></View>
+      </Screen>
+    );
+  }
 
   if (!isHydrated || areaList.status === 'loading') {
     return (
@@ -71,7 +89,11 @@ export function AddressEditorScreen() {
     return (
       <Screen edges={SCREEN_EDGES}>
         <Stack.Screen options={{ title }} />
-        <EmptyState icon="location" title="Address not found" message="It may have been deleted." />
+        {addressError ? (
+          <ErrorState error={addressError} onRetry={() => void reload()} />
+        ) : (
+          <EmptyState icon="location" title="Address not found" message="It may have been deleted." />
+        )}
       </Screen>
     );
   }
@@ -79,6 +101,7 @@ export function AddressEditorScreen() {
   // Mounted only now, so the form always starts from the loaded address.
   return (
     <EditorForm
+      key={`${auth.status === 'signedIn' ? auth.token : auth.status}:${existing?.id ?? 'new'}`}
       title={title}
       areas={areaList.data}
       initial={
@@ -86,6 +109,8 @@ export function AddressEditorScreen() {
           ? { ...existing }
           : {
               ...emptyCheckoutDetails,
+              fullName: auth.status === 'signedIn' ? auth.account.fullName ?? '' : '',
+              phone: auth.status === 'signedIn' ? auth.account.mobile ?? '' : '',
               label: addresses.length === 0 ? 'Home' : 'Other',
               isDefault: addresses.length === 0,
             }
@@ -109,16 +134,19 @@ function EditorForm({
   const theme = useTheme();
   const router = useRouter();
   const headerHeight = useHeaderHeight();
+  const { next } = useLocalSearchParams<{ next?: string | string[] }>();
   const { add, update } = useAddresses();
   const scrollRef = useRef<ScrollView>(null);
 
   const [draft, setDraft] = useState<AddressDraft>(initial);
   const [touched, setTouched] = useState<Partial<Record<CheckoutField, boolean>>>({});
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // A remembered area the shop no longer serves counts as not chosen.
   const selectedArea = areas.find((area) => area.id === draft.deliveryAreaId);
-  const errors = validateCheckoutDetails({ ...draft, deliveryAreaId: selectedArea?.id ?? null });
+  const errors = validateCheckoutDetails({ ...draft, deliveryAreaId: selectedArea?.id ?? null }, selectedArea);
   const visibleErrors: CheckoutErrors = {};
   for (const field of Object.keys(errors) as CheckoutField[]) {
     if (hasSubmitted || touched[field]) {
@@ -129,7 +157,8 @@ function EditorForm({
   const change = (changes: Partial<AddressDraft>) =>
     setDraft((current) => ({ ...current, ...changes }));
 
-  const save = () => {
+  const save = async () => {
+    if (isSaving) return;
     setHasSubmitted(true);
     const mobile = normalizeMobileNumber(draft.phone);
     if (hasErrors(errors) || !selectedArea || mobile === null) {
@@ -150,13 +179,22 @@ function EditorForm({
       deliveryAreaId: selectedArea.id,
     };
 
-    if (editingId) {
-      update(editingId, clean);
-    } else if (add(clean) === 'full') {
-      Alert.alert('Address book is full', 'Delete a saved address to add another.');
-      return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      if (editingId) {
+        await update(editingId, clean);
+      } else if (await add(clean) === 'full') {
+        Alert.alert('Address book is full', 'Delete a saved address to add another.');
+        return;
+      }
+      if (isCheckoutNext(next)) router.replace('/checkout');
+      else router.back();
+    } catch (error) {
+      setSaveError(toApiError(error).message);
+    } finally {
+      setIsSaving(false);
     }
-    router.back();
   };
 
   return (
@@ -235,7 +273,8 @@ function EditorForm({
 
         <View
           style={[styles.footer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <PrimaryButton title={editingId ? 'Save changes' : 'Save address'} onPress={save} />
+          {saveError ? <AppText variant="caption" color="danger" accessibilityLiveRegion="polite">{saveError}</AppText> : null}
+          <PrimaryButton title={editingId ? 'Save changes' : 'Save address'} onPress={() => void save()} loading={isSaving} />
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -271,6 +310,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: Spacing.three,
+    gap: Spacing.two,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

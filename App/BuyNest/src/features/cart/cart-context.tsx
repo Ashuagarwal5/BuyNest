@@ -1,3 +1,4 @@
+import { cartProductKey, cartRemainingPacks, cartStockIssue } from './product-pack';
 import {
   createContext,
   type PropsWithChildren,
@@ -34,6 +35,7 @@ type CartContextValue = {
   /** False until the saved cart has been read; the cart is usable (and empty) meanwhile. */
   isHydrated: boolean;
   getQuantity: (productId: string) => number;
+  getAvailableQuantity: (product: Product) => number;
   addItem: (product: Product, quantity?: number) => void;
   increment: (product: Product) => void;
   decrement: (product: Product) => void;
@@ -86,7 +88,7 @@ export function CartProvider({ children }: PropsWithChildren) {
     product,
     quantity,
     lineTotal: calculateLineTotal(product.sellingPrice, quantity),
-    issue: getIssue(product, quantity),
+    issue: getIssue(product, quantity) ?? cartStockIssue(product, state.entries),
   }));
 
   const getQuantity = (productId: string) => getEntryQuantity(state, productId);
@@ -128,13 +130,14 @@ export function CartProvider({ children }: PropsWithChildren) {
     hasIssues: lines.some((line) => line.issue !== null),
     isHydrated,
     getQuantity,
+    getAvailableQuantity: product => cartRemainingPacks(product,state.entries),
     addItem: (product, quantity = 1) => dispatch({ type: 'add', product, quantity }),
     increment: (product) => dispatch({ type: 'add', product, quantity: 1 }),
     decrement: (product) =>
       dispatch({
         type: 'setQuantity',
-        productId: product.id,
-        quantity: getQuantity(product.id) - 1,
+        productId: cartProductKey(product),
+        quantity: getQuantity(cartProductKey(product)) - 1,
       }),
     removeItem: (productId) => dispatch({ type: 'remove', productId }),
     clear: () => dispatch({ type: 'clear' }),

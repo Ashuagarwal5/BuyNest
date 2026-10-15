@@ -1,3 +1,4 @@
+import { cartProductKey } from '../product-pack';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
@@ -47,7 +48,7 @@ export function CartItem({ line }: CartItemProps) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Remove ${product.name} from cart`}
-          onPress={() => removeItem(product.id)}
+          onPress={() => removeItem(cartProductKey(product))}
           hitSlop={Spacing.three}
           style={({ pressed }) => pressed && styles.pressed}>
           <Icon name="delete" size={22} color="textSecondary" />

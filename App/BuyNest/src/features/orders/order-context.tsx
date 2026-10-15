@@ -1,4 +1,8 @@
-import { createContext, type PropsWithChildren, use, useEffect, useReducer, useRef } from 'react';
+import { createContext, type PropsWithChildren, use, useEffect, useLayoutEffect, useReducer, useRef } from 'react';
+
+import { useAuth } from '@/features/auth/auth-context';
+import { useAccountOrders } from '@/features/orders/use-account-orders';
+import { keepPendingOrder, pendingOrderAccess } from '@/features/orders/pending-order-access';
 
 import {
   initialOrdersState,
@@ -42,6 +46,8 @@ export type SubmitOrderResult =
   /** An earlier order is unconfirmed; it must be retried (or refused) before another is sent. */
   | { ok: false; kind: 'UNRESOLVED_ATTEMPT' }
   | { ok: false; kind: 'NOTHING_PENDING' }
+  /** A pending account purchase must be retried by its original account. */
+  | { ok: false; kind: 'AUTH_REQUIRED' }
   /** The server definitively refused the order. Nothing was created. */
   | { ok: false; kind: 'FAILED'; error: ApiError }
   /** No answer. The order may exist. The attempt is kept so it can be replayed. */
@@ -53,6 +59,8 @@ type OrdersContextValue = {
   index: OrdersState['index'];
   /** Newest first. */
   tracked: TrackedOrder[];
+  visibleOrders: Pick<TrackedOrder, 'orderNumber' | 'createdAt'>[];
+  accountHistory: ReturnType<typeof useAccountOrders>;
   legacyLocalOrderCount: number;
   /** False until the unconfirmed-order record has been read; do not submit before then. */
   pendingReady: boolean;
@@ -91,6 +99,10 @@ async function readIndex() {
  */
 export function OrdersProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(ordersReducer, initialOrdersState);
+  const { state: auth, validateSession, expireSession } = useAuth();
+  const currentAuth = useRef(auth);
+  useLayoutEffect(() => { currentAuth.current = auth; }, [auth]);
+  const accountHistory = useAccountOrders();
   // A ref, not state: it must flip synchronously so a fast double tap cannot start two.
   const isRequestInFlight = useRef(false);
 
@@ -117,6 +129,7 @@ export function OrdersProvider({ children }: PropsWithChildren) {
   const refreshOrder = async (orderNumber: string) => {
     const tracked = findTracked(orderNumber);
     if (!tracked) {
+      await accountHistory.refreshOrder(orderNumber);
       return;
     }
     dispatch({ type: 'orderLoading', orderNumber });
@@ -149,7 +162,13 @@ export function OrdersProvider({ children }: PropsWithChildren) {
    * removed only after the order is safely in the index: if saving fails, the record stays,
    * and replaying it later returns the same order and the same token to save again.
    */
-  const trackConfirmedOrder = async (placed: PlacedOrder) => {
+  const trackConfirmedOrder = async (placed: PlacedOrder, accountId?: string) => {
+    if (accountId) {
+      // The confirmed account link is durable on the server. Keep its view only in
+      // this session; never copy account purchases into the guest credential index.
+      accountHistory.rememberOrder(placed.order);
+      return true;
+    }
     // The index is re-read so an order tracked moments ago is not overwritten. If it
     // cannot be read, nothing is written (that could wipe the other orders); the order
     // is still kept in memory for this session.
@@ -174,6 +193,18 @@ export function OrdersProvider({ children }: PropsWithChildren) {
     attempt: PendingOrderAttempt,
     isReplay: boolean
   ): Promise<SubmitOrderResult> => {
+    const access = pendingOrderAccess(attempt.accountId, currentAuth.current);
+    if (!access.allowed) {
+      return { ok: false, kind: 'AUTH_REQUIRED' };
+    }
+    try {
+      const session = await validateSession();
+      if (session.account.id !== attempt.accountId || session.token !== access.token) return { ok: false, kind: 'AUTH_REQUIRED' };
+    } catch (error) {
+      const apiError = toApiError(error);
+      if (apiError.code === 'UNAUTHENTICATED') return { ok: false, kind: 'AUTH_REQUIRED' };
+      return { ok: false, kind: isReplay ? 'UNKNOWN' : 'FAILED', error: apiError };
+    }
     const sending: PendingOrderAttempt = { ...attempt, status: 'PENDING' };
     const isSaved = await savePendingAttempt(sending);
 
@@ -186,14 +217,17 @@ export function OrdersProvider({ children }: PropsWithChildren) {
       return { ok: false, kind: 'FAILED', error: new ApiError('STORAGE_ERROR') };
     }
     dispatch({ type: 'pendingChanged', pending: sending });
+    const latest = pendingOrderAccess(attempt.accountId, currentAuth.current);
+    if (!latest.allowed || latest.token !== access.token) return { ok: false, kind: 'AUTH_REQUIRED' };
 
     let placed: PlacedOrder;
     try {
-      placed = await createOrder(sending.request);
+      placed = await createOrder(sending.request, access.token);
     } catch (error) {
       const apiError = toApiError(error);
+      if (apiError.code === 'UNAUTHENTICATED') await expireSession(access.token);
 
-      if (apiError.isOutcomeUnknown) {
+      if (keepPendingOrder(apiError, isReplay, sending.accountId)) {
         // The server may have created the order. Keep the attempt for a safe replay.
         const unknown: PendingOrderAttempt = { ...sending, status: 'UNKNOWN' };
         await savePendingAttempt(unknown);
@@ -207,22 +241,29 @@ export function OrdersProvider({ children }: PropsWithChildren) {
       return { ok: false, kind: 'FAILED', error: apiError };
     }
 
-    if (await trackConfirmedOrder(placed)) {
+    if (await trackConfirmedOrder(placed, sending.accountId)) {
       await clearPendingAttempt();
       dispatch({ type: 'pendingChanged', pending: null });
     }
     return { ok: true, order: placed.order, cartFingerprint: sending.cartFingerprint };
   };
 
+  const visibleOrders = [...new Map([
+    ...state.tracked.map((order) => [order.orderNumber, { orderNumber: order.orderNumber, createdAt: order.createdAt }] as const),
+    ...accountHistory.items.map((order) => [order.orderNumber, { orderNumber: order.orderNumber, createdAt: order.createdAt }] as const),
+  ]).values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
   const value: OrdersContextValue = {
     index: state.index,
     tracked: state.tracked,
+    visibleOrders,
+    accountHistory,
     legacyLocalOrderCount: state.legacyLocalOrderCount,
     pendingReady: state.pendingReady,
     pending: state.pending,
     isSubmitting: state.isSubmitting,
-    getDetail: (orderNumber) => state.details[orderNumber],
-    isTracked: (orderNumber) => findTracked(orderNumber) !== undefined,
+    getDetail: (orderNumber) => state.details[orderNumber] ?? accountHistory.details[orderNumber],
+    isTracked: (orderNumber) => findTracked(orderNumber) !== undefined || accountHistory.active,
     reloadIndex: async () => {
       dispatch({ type: 'indexLoading' });
       dispatch(await readIndex());
@@ -230,7 +271,10 @@ export function OrdersProvider({ children }: PropsWithChildren) {
     refreshOrder,
     // Each order succeeds or fails on its own, so one unreachable order never hides the rest.
     refreshAll: async () => {
-      await Promise.all(state.tracked.map((tracked) => refreshOrder(tracked.orderNumber)));
+      await Promise.all([
+        ...state.tracked.map((tracked) => refreshOrder(tracked.orderNumber)),
+        accountHistory.refresh(),
+      ]);
     },
     submitOrder: (submission) =>
       withSubmissionLock(async () => {
@@ -242,7 +286,9 @@ export function OrdersProvider({ children }: PropsWithChildren) {
             ? sendAttempt(unresolved, true)
             : { ok: false, kind: 'UNRESOLVED_ATTEMPT' };
         }
-        return sendAttempt(createAttempt(submission, new Date()), false);
+        const session = currentAuth.current;
+        if (session.status !== 'signedIn') return { ok: false, kind: 'AUTH_REQUIRED' };
+        return sendAttempt(createAttempt(submission, new Date(), session.account.id), false);
       }),
     retryPending: () =>
       withSubmissionLock(async () => {
@@ -252,7 +298,7 @@ export function OrdersProvider({ children }: PropsWithChildren) {
     cancelOrder: async (orderNumber) => {
       const tracked = findTracked(orderNumber);
       if (!tracked) {
-        return { ok: false, error: toApiError(undefined) };
+        return accountHistory.cancelOrder(orderNumber);
       }
       try {
         // The response is the server's updated order, so the screen shows its verdict.

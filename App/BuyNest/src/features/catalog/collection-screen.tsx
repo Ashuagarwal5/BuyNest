@@ -1,4 +1,5 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { Tabs } from 'expo-router/js-tabs';
 
 import { EmptyState } from '@/components/ui/empty-state';
 import { Screen } from '@/components/ui/screen';
@@ -11,7 +12,7 @@ const COLLECTIONS: Record<string, { title: string; filter: ProductFilter; empty:
   new: { title: 'New Arrivals', filter: { isNew: true }, empty: 'New arrivals will appear here.' },
 };
 
-const SCREEN_EDGES = ['left', 'right', 'bottom'] as const;
+const SCREEN_EDGES = ['left', 'right'] as const;
 
 export function CollectionScreen() {
   const { kind } = useLocalSearchParams<{ kind: string }>();
@@ -20,7 +21,7 @@ export function CollectionScreen() {
   if (!collection) {
     return (
       <Screen edges={SCREEN_EDGES}>
-        <Stack.Screen options={{ title: 'Products' }} />
+        <Tabs.Screen options={{ title: 'Products' }} />
         <EmptyState icon="store" title="List not found" message="This list is not available." />
       </Screen>
     );
@@ -28,7 +29,7 @@ export function CollectionScreen() {
 
   return (
     <Screen edges={SCREEN_EDGES}>
-      <Stack.Screen options={{ title: collection.title }} />
+      <Tabs.Screen options={{ title: collection.title }} />
       <ProductGrid
         listKey={`collection:${kind}`}
         filter={collection.filter}

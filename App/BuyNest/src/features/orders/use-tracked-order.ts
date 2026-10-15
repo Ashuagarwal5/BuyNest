@@ -24,28 +24,31 @@ export type TrackedOrderView =
  * screen was just handed the order by the server and does not need to).
  */
 export function useTrackedOrder(orderNumber: string, fetchOnOpen: boolean): TrackedOrderView {
-  const { index, isTracked, getDetail, refreshOrder } = useOrders();
+  const { index, isTracked, getDetail, refreshOrder, accountHistory } = useOrders();
   const detail = getDetail(orderNumber);
   const tracked = isTracked(orderNumber);
 
   const fetchIfNeeded = useEffectEvent(() => {
-    if (index === 'ready' && tracked && (fetchOnOpen || !detail?.order)) {
+    if (index !== 'loading' && tracked && (fetchOnOpen || !detail?.order)) {
       refreshOrder(orderNumber);
     }
   });
   useEffect(() => {
     fetchIfNeeded();
-  }, [index, tracked, orderNumber]);
+  }, [index, tracked, orderNumber, accountHistory.sessionKey]);
 
   const refresh = () => {
     refreshOrder(orderNumber);
   };
 
-  if (index === 'loading') {
+  if (index === 'loading' || (!tracked && accountHistory.status === 'loading')) {
     return { status: 'loading' };
   }
   if (!tracked) {
     return { status: 'unknown' };
+  }
+  if (!detail && accountHistory.error?.code === 'UNAUTHENTICATED') {
+    return { status: 'error', error: accountHistory.error, refresh };
   }
   if (detail?.order) {
     return {

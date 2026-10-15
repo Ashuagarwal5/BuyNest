@@ -43,7 +43,7 @@ export function OrderDetailScreen() {
         <EmptyState
           icon="orders"
           title="Order not found"
-          message="This order was not placed from this device, so it cannot be opened here."
+          message="Sign in to the account used for this order, or open it on the device used for guest checkout."
           actionLabel="View my orders"
           onAction={() => router.dismissTo('/orders')}
         />
@@ -105,8 +105,8 @@ function OrderDetails({ view }: { view: Extract<TrackedOrderView, { status: 'rea
         <SectionCard title="Items">
           {order.items.map((item) => (
             <OrderItemRow
-              key={item.productId}
-              name={item.productName}
+              key={item.id ?? `${item.productId}:${item.variantId ?? "base"}`}
+              name={`${item.productName}${item.packLabel ? ` - ${item.packLabel}` : ""}${item.components?.length ? ` (${item.components.map(c => `${c.productName} x ${c.unitsPerPack}`).join(", ")})` : ""}`}
               quantity={item.quantity}
               unitPrice={item.unitPrice}
               lineTotal={item.lineTotal}

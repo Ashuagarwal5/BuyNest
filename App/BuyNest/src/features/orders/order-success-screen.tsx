@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
@@ -10,6 +11,7 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
 import { SectionCard } from '@/components/ui/section-card';
 import { Radius, Spacing } from '@/constants/theme';
+import { useNotifications } from '@/features/notifications/notifications-context';
 import { OrderAddress } from '@/features/orders/components/order-address';
 import { OrderStatusBadge } from '@/features/orders/components/status-badges';
 import { PAYMENT_METHOD_DISPLAY } from '@/features/orders/order-status';
@@ -25,6 +27,12 @@ export function OrderSuccessScreen() {
   const { id: orderNumber } = useLocalSearchParams<{ id: string }>();
   // Checkout arrives here with the order the server just returned already in memory.
   const view = useTrackedOrder(orderNumber, false);
+  const { permission, enablePush } = useNotifications();
+
+  // The natural moment to ask: the customer has just placed an order and wants updates on it.
+  useEffect(() => {
+    if (permission === 'undetermined') void enablePush();
+  }, [permission, enablePush]);
 
   const goHome = () => router.dismissTo('/');
 

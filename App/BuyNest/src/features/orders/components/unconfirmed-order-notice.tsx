@@ -49,6 +49,8 @@ export function UnconfirmedOrderNotice({ navigation = 'push' }: UnconfirmedOrder
       );
     } else if (result.kind === 'UNKNOWN') {
       setOutcome(`${result.error.message} We still could not confirm your order.`);
+    } else if (result.kind === 'AUTH_REQUIRED') {
+      setOutcome('Sign in to the account used for this order, then retry. Your pending order has been kept.');
     }
   };
 
@@ -62,14 +64,17 @@ export function UnconfirmedOrderNotice({ navigation = 'push' }: UnconfirmedOrder
     <View
       accessibilityRole="alert"
       style={[styles.container, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
+      {pending?.accountId ? (
+        <PrimaryButton title="Sign in" size="small" variant="secondary" onPress={() => router.push('/sign-in')} />
+      ) : null}
       {pending ? (
         <>
           <AppText variant="bodyStrong">We couldn&apos;t confirm your order</AppText>
           <AppText variant="caption" color="textSecondary">
             Your order for {itemCount} {itemCount === 1 ? 'item' : 'items'} to{' '}
-            {pending.request.customer.fullName} may already have been placed. Retry to check: this
-            is safe and will not create a duplicate. You can&apos;t place a new order until this is
-            confirmed.
+            {pending.request.customer.fullName} may already have been placed. {pending.accountId
+              ? 'Sign in to the original account and retry to check safely without creating a duplicate.'
+              : 'This earlier guest submission cannot be retried now that sign-in is required. Contact the shop to confirm its outcome.'} You can&apos;t place a new order until this is confirmed.
           </AppText>
         </>
       ) : null}
@@ -78,7 +83,7 @@ export function UnconfirmedOrderNotice({ navigation = 'push' }: UnconfirmedOrder
           {outcome}
         </AppText>
       ) : null}
-      {pending ? (
+      {pending?.accountId ? (
         <PrimaryButton
           title="Retry order"
           size="small"

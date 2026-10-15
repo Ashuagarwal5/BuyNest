@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { FlatList, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { ProductImage } from '@/features/catalog/components/product-image';
 import { useTheme } from '@/hooks/use-theme';
 import { resolveMediaUrl } from '@/services/api/config';
@@ -37,11 +37,11 @@ function PictureStrip({ product }: ProductGalleryProps) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const [page, setPage] = useState(0);
-  const pageWidth = width - SIDE_PADDING * 2;
+  const pageWidth = Math.min(width, MaxContentWidth) - SIDE_PADDING * 2;
   const height = Math.min(pageWidth / PICTURE_RATIO, MAX_PICTURE_HEIGHT);
 
   if (product.images.length <= 1) {
-    return <ProductImage product={product} iconSize={96} style={styles.image} />;
+    return <ProductImage product={product} iconSize={96} contentFit="contain" style={[styles.image, { backgroundColor: theme.surface }]} />;
   }
 
   return (
@@ -57,10 +57,10 @@ function PictureStrip({ product }: ProductGalleryProps) {
         }
         getItemLayout={(_data, index) => ({ length: pageWidth, offset: pageWidth * index, index })}
         renderItem={({ item, index }) => (
-          <View style={{ width: pageWidth, height, backgroundColor: theme.primarySoft, borderRadius: Radius.large, overflow: 'hidden' }}>
+          <View style={{ width: pageWidth, height, backgroundColor: theme.surface, borderRadius: Radius.large, overflow: 'hidden' }}>
             <Image
               source={{ uri: resolveMediaUrl(item) }}
-              contentFit="cover"
+              contentFit="contain"
               accessibilityLabel={`${product.name}, picture ${index + 1} of ${product.images.length}`}
               style={StyleSheet.absoluteFill}
             />

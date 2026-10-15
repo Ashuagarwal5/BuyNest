@@ -12,6 +12,14 @@ export type Category = {
  * Prices and stock here are for display; the server recalculates both when an order is placed.
  */
 export type Product = {
+  kind?: 'STANDARD' | 'COMBO';
+  variantId?: string;
+  packLabel?: string;
+  baseName?: string;
+  unitsPerPack?: number;
+  physicalStockQuantity?: number;
+  variants?: {id:string;label:string;unitsPerPack:number;mrp:number;sellingPrice:number;availableQuantity:number}[];
+  comboComponents?: {productId:string;productName:string;quantity:number;availableQuantity:number}[];
   id: string;
   name: string;
   slug: string;

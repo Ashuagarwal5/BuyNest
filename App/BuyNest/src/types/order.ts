@@ -24,6 +24,10 @@ export type OrderAddress = {
 
 /** Snapshot of the product at purchase time, as recorded by the server. */
 export type OrderItem = {
+  id?: string;
+  variantId?: string | null;
+  packLabel?: string | null;
+  components?: {productName:string;unitsPerPack:number}[];
   productId: string;
   productName: string;
   productImage: string | null;

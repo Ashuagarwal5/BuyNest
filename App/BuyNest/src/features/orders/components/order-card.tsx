@@ -11,7 +11,7 @@ import { formatDateTime } from '@/utils/date';
 import { formatCurrency } from '@/utils/money';
 
 type OrderCardProps = {
-  tracked: TrackedOrder;
+  tracked: Pick<TrackedOrder, 'orderNumber' | 'createdAt'>;
   /** Server data for this order, once fetched. */
   detail: OrderDetail | undefined;
 };

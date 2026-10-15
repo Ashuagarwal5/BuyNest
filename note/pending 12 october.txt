@@ -1,0 +1,535 @@
+step #4   :    Existing Architecture Audit
+# BuyNest — Pre-Implementation Architecture Audit
+
+Act as a senior full-stack architect and ecommerce product engineer.
+
+I am developing BuyNest, a local single-shop Cash-on-Delivery ecommerce platform consisting of:
+
+- React Native Expo customer application
+- Node.js/TypeScript backend
+- Prisma/PostgreSQL database
+- Web-based admin panel
+
+Before production launch, I want to implement five features:
+
+1. Manual customer signup/login using name, mobile number, email, optional email OTP verification, and saved addresses, while preserving Google sign-in.
+2. Product ratings and reviews, including verified-purchase and clearly labeled unverified reviews, with controlled admin review management.
+3. Firebase FCM push notifications with admin-controlled configuration, templates, and event triggers.
+4. In-app support chat between customers and authorized admin/support agents.
+5. A modern, responsive, professional admin panel UI/UX improvement.
+
+## Your task
+
+Perform a READ-ONLY audit of the existing implementation.
+
+Inspect:
+
+- Authentication modules and existing Google sign-in
+- Email OTP logic and SMTP configuration
+- Customer and guest database models
+- Customer profile and address management
+- Product and order schemas
+- Existing settings and admin permission systems
+- Existing notification infrastructure, if any
+- Existing chat or messaging infrastructure, if any
+- Admin frontend architecture, design system, and reusable components
+- Existing validation, tests, and API conventions
+
+## Output required
+
+For each requested feature, provide:
+
+1. Already implemented functionality
+2. Missing functionality
+3. Existing components/services that can be reused
+4. Required backend changes
+5. Required database changes
+6. Required mobile app changes
+7. Required admin panel changes
+8. Security considerations
+9. Dependencies and implementation order
+10. Recommended minimal production-quality approach
+
+## Important restrictions
+
+- Do not modify any files.
+- Do not run migrations.
+- Do not access production data.
+- Do not overwrite existing code.
+- Do not assume features are missing without inspecting the repository.
+- Do not introduce new libraries without explaining why they are necessary.
+
+Provide a detailed implementation plan based on the actual current BuyNest architecture.
+
+
+
+
+
+=====================================================================================================================================================================
+
+
+
+
+
+Step 5 — # BuyNest — Feature 3: Firebase FCM Push Notifications with Admin Management
+
+Act as a senior React Native Expo, Firebase, backend, and admin dashboard engineer.
+
+## Objective
+
+Implement production-quality mobile push notifications for BuyNest.
+
+Push notifications must be configurable from the admin panel and automatically triggered by supported ecommerce events.
+
+The system should remain functional even when Firebase credentials are not configured or notifications are disabled.
+
+## 1. Inspect existing architecture
+
+Review:
+
+- Expo SDK and app configuration
+- Existing Firebase integration, if any
+- Existing notification packages
+- Existing backend event and order status architecture
+- Existing admin settings
+- Authentication and customer records
+- Existing server-side secret encryption utilities
+
+Determine whether direct FCM HTTP v1 or Expo Push Service is more suitable.
+
+Do not assume Firebase authentication is required.
+
+Document Android FCM requirements and iOS APNs requirements separately.
+
+## 2. Admin Firebase configuration
+
+Create a new admin section:
+
+Settings > Push Notifications
+
+Support:
+
+- Enable/Disable Push Notifications
+- Firebase Project ID configuration
+- Secure service account configuration
+- Credential validation status
+- Test Notification
+- Order event notification settings
+- Promotional notification settings
+- Support chat notification settings
+- Delivery and failure logs
+
+Sensitive Firebase credentials must never be returned to the admin frontend after storage.
+
+Use secure server-side secret management or encrypted storage consistent with the existing project.
+
+Do not expose private keys in mobile builds, API responses, or logs.
+
+Only authorized admins may modify credentials and notification settings.
+
+## 3. Customer device registration
+
+Implement:
+
+- Permission request at an appropriate point in the app experience
+- Push token generation
+- Backend device token registration
+- Multiple devices per customer
+- Token refresh and replacement
+- Logout token/account unlinking
+- Removal of invalid tokens
+- Notification preference management
+- Guest device support only where secure and appropriate
+
+Handle notification permission denied gracefully.
+
+Do not require notification permission for shopping or checkout.
+
+## 4. Automatic notification events
+
+Support configurable notifications for:
+
+- Order Placed
+- Order Confirmed/Accepted
+- Order Processing
+- Out for Delivery, if supported by existing order statuses
+- Order Delivered
+- Order Cancelled
+- Delivery Failed
+- New Support Chat Reply
+- Promotional Offers
+
+Map triggers to the actual existing order statuses.
+
+Do not invent new order states unless genuinely required.
+
+Never send an order notification before the associated database transaction succeeds.
+
+Prevent duplicate notifications from retries and repeated order events.
+
+## 5. Notification templates
+
+Create an admin notification template manager.
+
+Each template should support:
+
+- Template name
+- Event type
+- Title
+- Body
+- Allowed dynamic variables
+- Active/Inactive status
+- Preview
+- Test notification
+
+Example:
+
+Title: Order Confirmed
+
+Body: Your BuyNest order {{orderNumber}} has been confirmed.
+
+Allow only server-defined, validated template variables.
+
+Escape or safely substitute customer-controlled values.
+
+Do not expose sensitive customer or order information in lock-screen notifications.
+
+## 6. Promotional notifications
+
+Allow authorized admins to:
+
+- Compose a promotional notification
+- Preview it
+- Select eligible recipients
+- Send a test notification
+- Send to opted-in customers
+- View delivery results where available
+
+Respect notification permissions and marketing opt-in preferences.
+
+Implement rate limiting, batch processing, and abuse prevention.
+
+Do not send promotional notifications automatically during development or tests.
+
+## 7. Notification history
+
+Store:
+
+- Notification event
+- Recipient/customer reference
+- Template reference
+- Creation timestamp
+- Sending status
+- Provider result
+- Error information
+- Retry count
+
+Distinguish provider acceptance from actual delivery.
+
+Use bounded retries and prevent duplicate sends where feasible.
+
+## 8. Mobile notification UX
+
+Implement:
+
+- Foreground notifications
+- Background notifications
+- Notification tap handling
+- Appropriate navigation/deep links
+- Order detail navigation
+- Support chat navigation
+- Permission and preferences screens
+
+Validate that notification navigation does not bypass authentication or order ownership checks.
+
+## 9. Safety and configuration
+
+- If push notifications are disabled, do not send.
+- If credentials are missing, do not crash.
+- Do not embed server credentials in the mobile app.
+- Do not use deprecated FCM legacy sending APIs.
+- Do not log device tokens or sensitive credentials.
+- Keep checkout independent of push provider availability.
+- Do not send real notifications without explicit authorization.
+
+## 10. Testing
+
+Test:
+
+- Notifications enabled and disabled
+- Credentials missing
+- Invalid credentials
+- Token registration
+- Token refresh
+- Multiple devices
+- Logout
+- Order event triggers
+- Template substitution
+- Duplicate event protection
+- Failed sends and retries
+- Admin authorization
+- Notification tap navigation
+
+Use mocks for automated tests.
+
+Provide a physical-device testing checklist for Android and iOS.
+
+## Restrictions
+
+Do not access production Firebase credentials or production data.
+
+Do not send bulk notifications.
+
+Do not deploy automatically.
+
+Do not apply production migrations.
+
+Preserve existing working-tree changes.
+
+## Expected result
+
+A functional, admin-configurable push notification system integrated into BuyNest.
+
+Provide:
+
+1. Files changed
+2. Prisma changes
+3. Backend and mobile implementation details
+4. Firebase setup instructions
+5. Android and iOS build requirements
+6. Tests performed
+7. Remaining real-device verification requirements
+
+
+
+
+
+
+=====================================================================================================================================================================
+
+
+
+
+
+
+# BuyNest — Feature 4: In-App Human Customer Support Chat
+
+Act as a senior full-stack engineer experienced with customer support messaging systems.
+
+## Objective
+
+Implement a simple, reliable, in-app human support chat system for BuyNest.
+
+Customers should be able to send messages from the mobile application, and authorized admins or support agents should be able to reply from the admin panel.
+
+Do not implement an AI chatbot.
+
+## 1. Inspect existing code
+
+Review:
+
+- Customer authentication
+- Guest checkout and guest identity
+- Customer models
+- Order models
+- Admin authentication and roles
+- Existing APIs
+- Existing WebSocket or real-time infrastructure
+- Existing push notification implementation
+- Existing admin UI components
+
+Reuse existing infrastructure where reasonable.
+
+## 2. Customer chat interface
+
+Create a Support Chat screen.
+
+Implement:
+
+- Start a new support conversation
+- Send text messages
+- View conversation history
+- Display timestamps
+- Display agent replies
+- Basic message delivery status
+- Loading and error states
+- Retry failed message submissions
+- Optional order reference selection
+- Closed conversation state
+
+Allow users to find support from the Profile, Help, or Orders section.
+
+Do not expose another customer's conversation.
+
+## 3. Guest customer support
+
+Preserve guest checkout compatibility.
+
+Determine a safe approach for guest support conversations using existing guest credentials or another secure conversation ownership token.
+
+Never allow chat access based only on a guessed phone number, email, or order ID.
+
+If secure guest chat cannot be implemented within the existing architecture, provide a documented guest support fallback without weakening authentication.
+
+## 4. Admin support dashboard
+
+Create an admin section:
+
+Support > Customer Chats
+
+Include:
+
+- Conversation list
+- Customer name where available
+- Last message preview
+- Last updated timestamp
+- Unread message count
+- Open/Closed status
+- Assigned support agent
+- Message thread
+- Reply composer
+- Search and filtering
+
+Allow authorized admins to reply and close or reopen conversations.
+
+Support basic agent assignment if compatible with existing admin permissions.
+
+## 5. Real-time functionality
+
+Implement reliable message updates.
+
+Prefer existing realtime infrastructure if available.
+
+Otherwise compare WebSocket, Server-Sent Events, and short polling based on current deployment architecture.
+
+Choose the simplest maintainable production-appropriate solution.
+
+Ensure reconnect, network loss, duplicate messages, and out-of-order responses are handled appropriately.
+
+## 6. Database
+
+Add only necessary Prisma structures for:
+
+- Support conversations
+- Participants
+- Messages
+- Agent assignments
+- Read status
+- Conversation status
+- Created/updated timestamps
+
+Use indexed queries and pagination.
+
+Do not store messages exclusively in device-local storage.
+
+## 7. Security
+
+Implement:
+
+- Conversation ownership validation
+- Authenticated support-agent permissions
+- Input validation
+- Message length limits
+- Rate limiting
+- Safe text rendering
+- Protection against cross-customer access
+- Secure handling of customer contact data
+- No sensitive data leakage through admin APIs
+
+## 8. Push notification integration
+
+If the BuyNest push notification system is available:
+
+- Notify customers when an agent replies
+- Notify the relevant admin/support agent when a new customer message arrives, where a suitable notification channel exists
+- Respect global and event-specific notification settings
+- Avoid duplicate notifications
+- Do not block message delivery if push notifications fail
+
+Do not require Firebase for basic chat functionality.
+
+## 9. Future compatibility
+
+Structure the system so that future versions can support:
+
+- Multiple support agents
+- Chat attachments
+- Automated replies
+- Working hours
+- Conversation categorization
+
+Do not implement these advanced features unless needed for the basic chat to function.
+
+## 10. Testing
+
+Test:
+
+- Start conversation
+- Customer sends message
+- Admin receives message
+- Admin replies
+- Customer sees reply
+- Refresh/reconnect
+- Duplicate send retry
+- Unauthorized conversation access
+- Guest support access
+- Closed conversation handling
+- Push integration fallback
+
+## Restrictions
+
+Do not redesign unrelated modules.
+
+Do not integrate third-party paid chat services without explicit approval.
+
+Do not access or alter production data.
+
+Do not run production migrations.
+
+Do not introduce AI chatbot functionality.
+
+Preserve existing working-tree changes.
+
+## Expected result
+
+A working in-app human support chat feature connected to the admin panel.
+
+Provide modified files, backend architecture, database changes, tests, and remaining deployment considerations.
+
+
+
+
+
+
+
+
+
+
+
+
+=================================================================================================================================================================================================================================================================================================================================================================
+ 
+
+
+
+
+
+Payment information
+We accept UPI payment
+Once you place your order, will call back to your registered number mentioned in the order details/ please call to 9500719726. will review the order and finalized. will collect the payment via UPI. UPI details will be shared on the call to get confirm the payment.
+Note: sorry for the inconvenience, this is to avoid scam.
+
+
+
+
+
+Payment method:
+We accept Cash & UPI payment
+
+
+
+
+
+
+
+add A COMBO  package of products

@@ -14,11 +14,14 @@ function symbol(ios: IosSymbol, material: MaterialSymbol): PlatformSymbol {
 }
 
 const ICONS = {
+  back: symbol('arrow.left', 'arrow_back'),
+  chevron: symbol('chevron.right', 'chevron_right'),
   home: symbol('house.fill', 'home'),
   categories: symbol('square.grid.2x2.fill', 'category'),
   cart: symbol('cart.fill', 'shopping_cart'),
   orders: symbol('shippingbox.fill', 'receipt_long'),
   account: symbol('person.fill', 'person'),
+  bell: symbol('bell.fill', 'notifications'),
   search: symbol('magnifyingglass', 'search'),
   location: symbol('mappin.and.ellipse', 'location_on'),
   add: symbol('plus', 'add'),

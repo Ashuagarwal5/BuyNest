@@ -1,4 +1,4 @@
-type CartItem = { productId: string; quantity: number };
+type CartItem = { productId: string; variantId?: string; quantity: number };
 
 /**
  * A stable description of what is in a cart: the same products and quantities always
@@ -7,7 +7,7 @@ type CartItem = { productId: string; quantity: number };
  */
 export function fingerprintCartItems(items: CartItem[]): string {
   return items
-    .map((item) => `${item.productId}x${item.quantity}`)
+    .map((item) => item.variantId ? `${JSON.stringify([item.productId,item.variantId])}x${item.quantity}` : `${item.productId}x${item.quantity}`)
     .sort()
     .join('|');
 }

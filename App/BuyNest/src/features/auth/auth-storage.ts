@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 
 /**
  * The sign-in token lives in the phone's secure store (Android Keystore), not in AsyncStorage,
- * so other apps and backups cannot read it. Nothing here throws: a failure means "not signed in".
+ * so other apps and backups cannot read it. Storage failures are reported to the caller.
  */
 const TOKEN_KEY = 'doorkart.account-token';
 
@@ -24,10 +24,12 @@ export async function saveToken(token: string): Promise<boolean> {
   }
 }
 
-export async function clearToken(): Promise<void> {
+/** Returns false when the phone could not remove the persisted session. */
+export async function clearToken(): Promise<boolean> {
   try {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
+    return true;
   } catch {
-    // Nothing more can be done; the token is also removed from the server on sign-out.
+    return false;
   }
 }

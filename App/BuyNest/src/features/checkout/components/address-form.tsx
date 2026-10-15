@@ -1,7 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { TextInput } from 'react-native';
 
 import { FormField } from '@/components/ui/form-field';
+import { PrimaryButton } from '@/components/ui/primary-button';
 import { SectionCard } from '@/components/ui/section-card';
 import type { CheckoutDetails, CheckoutErrors } from '@/features/checkout/checkout-details';
 
@@ -13,9 +14,12 @@ type AddressFormProps = {
   errors: CheckoutErrors;
   onChange: (field: TextField, value: string) => void;
   onBlur: (field: TextField) => void;
+  compact?: boolean;
 };
 
-export function AddressForm({ details, errors, onChange, onBlur }: AddressFormProps) {
+export function AddressForm({ details, errors, onChange, onBlur, compact = false }: AddressFormProps) {
+  const [showOptional, setShowOptional] = useState(false);
+  const optionalVisible = !compact || showOptional || Boolean(details.addressLine2 || details.landmark || errors.addressLine2 || errors.landmark);
   const phoneRef = useRef<TextInput>(null);
   const line1Ref = useRef<TextInput>(null);
   const line2Ref = useRef<TextInput>(null);
@@ -32,7 +36,7 @@ export function AddressForm({ details, errors, onChange, onBlur }: AddressFormPr
 
   return (
     <>
-      <SectionCard title="Contact Details">
+      <SectionCard title="Contact details">
         <FormField
           label="Full Name"
           placeholder="Name of the person receiving the order"
@@ -59,7 +63,7 @@ export function AddressForm({ details, errors, onChange, onBlur }: AddressFormPr
         />
       </SectionCard>
 
-      <SectionCard title="Delivery Address">
+      <SectionCard title="Delivery address">
         <FormField
           ref={line1Ref}
           label="Address Line 1"
@@ -69,9 +73,11 @@ export function AddressForm({ details, errors, onChange, onBlur }: AddressFormPr
           textContentType="streetAddressLine1"
           returnKeyType="next"
           submitBehavior="submit"
-          onSubmitEditing={() => line2Ref.current?.focus()}
+          onSubmitEditing={() => optionalVisible ? line2Ref.current?.focus() : cityRef.current?.focus()}
           {...bind('addressLine1')}
         />
+        {compact && !optionalVisible ? <PrimaryButton title="Add landmark or address details (optional)" size="small" variant="secondary" onPress={() => setShowOptional(true)} /> : null}
+        {optionalVisible ? <>
         <FormField
           ref={line2Ref}
           label="Address Line 2"
@@ -96,6 +102,7 @@ export function AddressForm({ details, errors, onChange, onBlur }: AddressFormPr
           onSubmitEditing={() => cityRef.current?.focus()}
           {...bind('landmark')}
         />
+        </> : null}
         <FormField
           ref={cityRef}
           label="City"

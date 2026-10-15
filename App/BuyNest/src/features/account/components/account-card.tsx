@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
+import { ErrorState } from '@/components/ui/error-state';
 import { Icon } from '@/components/ui/icon';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Radius, Spacing } from '@/constants/theme';
@@ -11,10 +12,10 @@ import { useTheme } from '@/hooks/use-theme';
 import { toApiError } from '@/services/api/api-error';
 
 /** Who is using the app: a guest with a way to sign in, or the signed-in customer with sign out and delete. */
-export function AccountCard() {
+export function AccountCard({ manageAccount = false }: { manageAccount?: boolean }) {
   const theme = useTheme();
   const router = useRouter();
-  const { state, signOut, deleteAccount } = useAuth();
+  const { state, signOut, deleteAccount, retrySession } = useAuth();
   const [isBusy, setIsBusy] = useState(false);
 
   const run = async (action: () => Promise<void>) => {
@@ -41,6 +42,7 @@ export function AccountCard() {
   if (state.status === 'loading') {
     return <View style={[styles.card, styles.placeholder, { backgroundColor: theme.primarySoft }]} />;
   }
+  if (state.status === 'error') return <ErrorState error={state.error} onRetry={retrySession} />;
 
   const account = state.status === 'signedIn' ? state.account : null;
 
@@ -48,7 +50,9 @@ export function AccountCard() {
     <View style={[styles.card, { backgroundColor: theme.primarySoft }]}>
       <View style={styles.row}>
         <View style={[styles.avatar, { backgroundColor: theme.surface }]}>
-          <Icon name="account" size={32} color="primary" />
+          {account?.fullName ? (
+            <AppText variant="title" color="primary">{account.fullName.trim().charAt(0).toUpperCase()}</AppText>
+          ) : <Icon name="account" size={32} color="primary" />}
         </View>
         <View style={styles.text}>
           {account ? (
@@ -58,6 +62,9 @@ export function AccountCard() {
               </AppText>
               <AppText variant="caption" color="textSecondary" numberOfLines={1}>
                 {account.email}
+              </AppText>
+              <AppText variant="captionStrong" color={account.emailVerified ? 'success' : 'textSecondary'}>
+                {account.emailVerified ? 'Verified email' : 'Email not verified'}
               </AppText>
             </>
           ) : (
@@ -73,11 +80,17 @@ export function AccountCard() {
 
       {account ? (
         <View style={styles.actions}>
-          <PrimaryButton title="Sign out" variant="secondary" loading={isBusy} onPress={() => void run(signOut)} />
-          <PrimaryButton title="Delete my account" variant="danger" size="small" disabled={isBusy} onPress={confirmDelete} />
+          <PrimaryButton title="View and edit profile" variant="secondary" onPress={() => router.push('/profile')} />
+          {manageAccount ? <>
+            <PrimaryButton title="Sign out" variant="secondary" loading={isBusy} onPress={() => void run(signOut)} />
+            <PrimaryButton title="Delete my account" variant="danger" disabled={isBusy} onPress={confirmDelete} />
+          </> : null}
         </View>
       ) : (
-        <PrimaryButton title="Sign in" onPress={() => router.push('/sign-in')} />
+        <View style={styles.actions}>
+          <PrimaryButton title="Sign in" onPress={() => router.push('/sign-in')} />
+          <PrimaryButton title="Create account" variant="secondary" onPress={() => router.push('/register')} />
+        </View>
       )}
     </View>
   );

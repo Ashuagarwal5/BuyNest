@@ -9,6 +9,7 @@ function isProduct(value: unknown): value is Product {
   const product = value as Record<string, unknown>;
   return (
     typeof product.id === 'string' &&
+    (product.variantId === undefined || (typeof product.variantId === 'string' && product.variantId.length > 0)) &&
     typeof product.name === 'string' &&
     typeof product.slug === 'string' &&
     typeof product.description === 'string' &&

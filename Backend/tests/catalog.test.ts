@@ -90,6 +90,79 @@ describe('GET /api/v1/products', () => {
     expect(names(search.body)).toEqual(['Classmate Notebook']);
   });
 
+  describe('sorting and filtering', () => {
+    const inOrder = async (query: string) =>
+      (await request(app).get(`/api/v1/products?${query}`)).body.data.items.map(
+        (item: { name: string }) => item.name
+      );
+
+    it('sorts by price, low to high and high to low', async () => {
+      expect(await inOrder('sort=price_asc')).toEqual([
+        'Pencil Pack',
+        'Classmate Notebook',
+        'Teddy Bear',
+        'Remote Car',
+      ]);
+      expect(await inOrder('sort=price_desc')).toEqual([
+        'Remote Car',
+        'Teddy Bear',
+        'Classmate Notebook',
+        'Pencil Pack',
+      ]);
+    });
+
+    it('sorts by name', async () => {
+      expect(await inOrder('sort=name_asc')).toEqual([
+        'Classmate Notebook',
+        'Pencil Pack',
+        'Remote Car',
+        'Teddy Bear',
+      ]);
+    });
+
+    it('keeps pages consistent while sorted by price', async () => {
+      const first = await inOrder('sort=price_asc&limit=2&page=1');
+      const second = await inOrder('sort=price_asc&limit=2&page=2');
+
+      expect([...first, ...second]).toEqual(['Pencil Pack', 'Classmate Notebook', 'Teddy Bear', 'Remote Car']);
+    });
+
+    it('filters by a price range in paise, both ends included', async () => {
+      expect(await inOrder('minPrice=34900&maxPrice=44900&sort=price_asc')).toEqual([
+        'Classmate Notebook',
+        'Teddy Bear',
+      ]);
+      expect(await inOrder('maxPrice=14950')).toEqual(['Pencil Pack']);
+      expect(await inOrder('minPrice=69900')).toEqual(['Remote Car']);
+      expect(await inOrder('minPrice=100000')).toEqual([]);
+    });
+
+    it('can show only products that can be ordered right now', async () => {
+      const names = (await inOrder('inStock=true')).sort();
+
+      expect(names).toEqual(['Classmate Notebook', 'Pencil Pack', 'Remote Car']);
+    });
+
+    it('combines the options with category and new arrivals', async () => {
+      expect(await inOrder('category=toys&sort=price_desc&inStock=true')).toEqual(['Remote Car']);
+      expect(await inOrder('new=true&maxPrice=20000')).toEqual(['Pencil Pack']);
+    });
+
+    it('rejects values that make no sense', async () => {
+      for (const query of [
+        'sort=cheapest',
+        'minPrice=-1',
+        'minPrice=1.5',
+        'minPrice=abc',
+        'minPrice=500&maxPrice=100',
+        'inStock=maybe',
+      ]) {
+        const response = await request(app).get(`/api/v1/products?${query}`);
+        expect(response.status, query).toBe(400);
+      }
+    });
+  });
+
   it('fetches exactly the products asked for by id, leaving out unknown and inactive ones', async () => {
     const { notebook, pencil, inactive } = fixtures.products;
 
@@ -147,7 +220,7 @@ describe('GET /api/v1/delivery-areas', () => {
       {
         id: fixtures.areas.withMinimum.id,
         name: 'Model Town',
-        pincode: null,
+        pincode: fixtures.areas.withMinimum.pincode,
         deliveryChargePaise: 4000,
         minimumOrderPaise: 20000,
         freeDeliveryThresholdPaise: null,
@@ -155,7 +228,7 @@ describe('GET /api/v1/delivery-areas', () => {
       {
         id: fixtures.areas.standard.id,
         name: 'Station Road',
-        pincode: null,
+        pincode: fixtures.areas.standard.pincode,
         deliveryChargePaise: 3000,
         minimumOrderPaise: null,
         freeDeliveryThresholdPaise: 50000,

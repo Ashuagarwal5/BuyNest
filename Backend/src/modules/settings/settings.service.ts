@@ -26,6 +26,7 @@ export type SettingView = {
 
 export type SettingsView = {
   secretsKeyConfigured: boolean;
+  smtpConfigured: boolean;
   groups: { id: SettingGroup; title: string; description: string; settings: SettingView[] }[];
 };
 
@@ -38,9 +39,11 @@ async function loadAll(): Promise<Map<string, Stored>> {
 
 export async function getSettingsView(secretsKeyConfigured: boolean): Promise<SettingsView> {
   const stored = await loadAll();
+  const reader = settingsFrom(stored);
 
   return {
     secretsKeyConfigured,
+    smtpConfigured: secretsKeyConfigured && smtpConfig(reader) !== null,
     groups: SETTING_GROUPS.map((group) => ({
       ...group,
       settings: SETTING_DEFINITIONS.filter((definition) => definition.group === group.id).map((definition) => {
@@ -90,6 +93,15 @@ function validate(definition: SettingDefinition, raw: string): string {
   }
   if (definition.key === 'smtp.host' && !/^[A-Za-z0-9.-]+$/.test(value)) {
     fail('Enter only the server name, like smtp.gmail.com, without http:// or spaces.');
+  }
+  if (
+    (definition.key === 'shop.phone' || definition.key === 'shop.whatsapp') &&
+    !/^\+?[\d\s-]{8,16}$/.test(value)
+  ) {
+    fail('Enter a phone number with 8 to 15 digits.');
+  }
+  if (definition.key.endsWith('Url') && !/^https:\/\/\S+$/i.test(value)) {
+    fail('Enter a full web address starting with https://.');
   }
   if (definition.key.endsWith('ClientId') && !/^[A-Za-z0-9._-]+$/.test(value)) {
     fail('A client ID has letters, digits, dots and dashes only.');
@@ -150,6 +162,10 @@ export type SettingsReader = {
 /** One database read, then plain lookups: stored value, else the registry default, else "". */
 export async function readSettings(): Promise<SettingsReader> {
   const stored = await loadAll();
+  return settingsFrom(stored);
+}
+
+function settingsFrom(stored: Map<string, Stored>): SettingsReader {
   return {
     text: (key) => stored.get(key)?.value ?? getDefinition(key)?.defaultValue ?? '',
     secret: (key) => {
@@ -199,8 +215,46 @@ export function googleConfig(settings: SettingsReader): GoogleConfig {
   return { enabled: settings.text('auth.googleEnabled') === 'true' && webClientId !== '', clientIds, webClientId };
 }
 
+export type ShopInfo = {
+  name: string;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  address: string | null;
+  hours: string | null;
+  privacyPolicyUrl: string | null;
+  termsUrl: string | null;
+};
+
+/** The shop details customers may see. Empty boxes become null so the app can hide them. */
+export function shopInfo(settings: SettingsReader): ShopInfo {
+  const text = (key: string) => settings.text(key) || null;
+  return {
+    name: 'DoorKart',
+    phone: text('shop.phone'),
+    whatsapp: text('shop.whatsapp'),
+    email: text('shop.email'),
+    address: text('shop.address'),
+    hours: text('shop.hours'),
+    privacyPolicyUrl: text('shop.privacyPolicyUrl'),
+    termsUrl: text('shop.termsUrl'),
+  };
+}
+
 export function otpExpiryMinutes(settings: SettingsReader): number {
   return Number(settings.text('auth.otpExpiryMinutes')) || 10;
+}
+
+export function otpResendCooldownSeconds(settings: SettingsReader): number {
+  return Number(settings.text('auth.otpResendCooldownSeconds')) || 60;
+}
+
+export function otpMaxAttempts(settings: SettingsReader): number {
+  return Number(settings.text('auth.otpMaxAttempts')) || 5;
+}
+
+export function registrationVerificationRequired(settings: SettingsReader): boolean {
+  return settings.text('auth.registrationOtpEnabled') !== 'false' || settings.text('auth.requireEmailVerification') !== 'false';
 }
 
 export function emailSignInEnabled(settings: SettingsReader): boolean {

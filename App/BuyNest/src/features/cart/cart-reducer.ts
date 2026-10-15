@@ -1,5 +1,6 @@
-import { fingerprintCartItems } from '@/features/cart/cart-fingerprint';
-import type { Product } from '@/types/catalog';
+import { cartProductKey, cartRemainingPacks, selectProductPack } from './product-pack';
+import { fingerprintCartItems } from './cart-fingerprint';
+import type { Product } from '../../types/catalog';
 
 /**
  * A cart line keeps the product as the server last described it. That snapshot is only
@@ -29,16 +30,16 @@ export type CartAction =
 export const initialCartState: CartState = { entries: [] };
 
 function withoutEntry(state: CartState, productId: string): CartState {
-  return { entries: state.entries.filter((entry) => entry.product.id !== productId) };
+  return { entries: state.entries.filter((entry) => cartProductKey(entry.product) !== productId) };
 }
 
 export function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case 'add': {
       const { product } = action;
-      const current = getEntryQuantity(state, product.id);
+      const current = getEntryQuantity(state, cartProductKey(product));
       // Never above the stock the server last reported for this product.
-      const quantity = Math.min(current + Math.max(action.quantity, 0), product.stockQuantity);
+      const quantity = current + Math.min(Math.max(action.quantity, 0), cartRemainingPacks(product, state.entries));
       if (quantity <= 0) {
         return state;
       }
@@ -47,16 +48,16 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       }
       return {
         entries: state.entries.map((entry) =>
-          entry.product.id === product.id ? { product, quantity } : entry
+          cartProductKey(entry.product) === cartProductKey(product) ? { product, quantity } : entry
         ),
       };
     }
     case 'setQuantity': {
-      const entry = state.entries.find((candidate) => candidate.product.id === action.productId);
+      const entry = state.entries.find((candidate) => cartProductKey(candidate.product) === action.productId);
       if (!entry) {
         return state;
       }
-      const quantity = Math.min(action.quantity, entry.product.stockQuantity);
+      const quantity = Math.min(action.quantity, cartRemainingPacks(entry.product, state.entries.filter(candidate => candidate !== entry)));
       if (quantity <= 0) {
         return withoutEntry(state, action.productId);
       }
@@ -74,14 +75,14 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       // Decided against the cart as it is NOW, not as it was when the order was sent: the
       // customer may have changed it since, and a newer cart must never be erased.
       const current = fingerprintCartItems(
-        state.entries.map((entry) => ({ productId: entry.product.id, quantity: entry.quantity }))
+        state.entries.map((entry) => ({ productId: entry.product.id, variantId: entry.product.variantId, quantity: entry.quantity }))
       );
       return current === action.fingerprint ? initialCartState : state;
     }
     case 'hydrate': {
       // Anything added while storage was still loading wins over the saved copy.
-      const current = new Set(state.entries.map((entry) => entry.product.id));
-      const restored = action.entries.filter((entry) => !current.has(entry.product.id));
+      const current = new Set(state.entries.map((entry) => cartProductKey(entry.product)));
+      const restored = action.entries.filter((entry) => !current.has(cartProductKey(entry.product)));
       return restored.length === 0 ? state : { entries: [...restored, ...state.entries] };
     }
     case 'sync': {
@@ -95,7 +96,7 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
             return { ...entry, product: { ...entry.product, stockQuantity: 0 } };
           }
           const product = fresh.get(entry.product.id);
-          return product ? { ...entry, product } : entry;
+          return product ? { ...entry, product: selectProductPack(product, entry.product.variantId) } : entry;
         }),
       };
     }
@@ -103,5 +104,5 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
 }
 
 export function getEntryQuantity(state: CartState, productId: string): number {
-  return state.entries.find((entry) => entry.product.id === productId)?.quantity ?? 0;
+  return state.entries.find((entry) => cartProductKey(entry.product) === productId)?.quantity ?? 0;
 }

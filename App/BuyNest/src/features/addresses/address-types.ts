@@ -1,6 +1,6 @@
-import type { CheckoutDetails } from '@/features/checkout/checkout-details';
+import type { CheckoutDetails } from '../checkout/checkout-details';
 
-/** A delivery address the customer keeps on this phone, with the contact details to go with it. */
+/** A saved delivery address and contact details, held by an account or this guest device. */
 
 export const ADDRESS_LABELS = ['Home', 'Work', 'Other'] as const;
 export type AddressLabel = (typeof ADDRESS_LABELS)[number];

@@ -38,9 +38,11 @@ export type PendingOrderAttempt = {
   /** ISO 8601 timestamp. */
   createdAt: string;
   status: 'PENDING' | 'UNKNOWN';
+  /** Original purchaser; absent for guest and legacy attempts. Never store a session token. */
+  accountId?: string;
 };
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /**
  * The attempt as this app process knows it. Storage can fail; this cannot, so the rule
@@ -62,7 +64,7 @@ export function fingerprintSubmission(submission: OrderSubmission): string {
     ],
     deliveryAreaId: submission.deliveryAreaId,
     items: submission.items
-      .map((item) => `${item.productId}x${item.quantity}`)
+      .map((item) => item.variantId ? `${JSON.stringify([item.productId,item.variantId])}x${item.quantity}` : `${item.productId}x${item.quantity}`)
       .sort((a, b) => a.localeCompare(b)),
     paymentMethod: submission.paymentMethod,
   });
@@ -77,7 +79,7 @@ function generateClientRequestId(): string {
   return `bn-${Date.now().toString(36)}-${random()}${random()}`;
 }
 
-export function createAttempt(submission: OrderSubmission, now: Date): PendingOrderAttempt {
+export function createAttempt(submission: OrderSubmission, now: Date, accountId?: string): PendingOrderAttempt {
   const clientRequestId = generateClientRequestId();
   return {
     clientRequestId,
@@ -86,6 +88,7 @@ export function createAttempt(submission: OrderSubmission, now: Date): PendingOr
     request: { clientRequestId, ...submission },
     createdAt: now.toISOString(),
     status: 'PENDING',
+    accountId,
   };
 }
 
@@ -109,6 +112,7 @@ function isPendingAttempt(value: unknown): value is PendingOrderAttempt {
     isText(attempt.fingerprint) &&
     isText(attempt.cartFingerprint) &&
     isText(attempt.createdAt) &&
+    (attempt.accountId === undefined || (isText(attempt.accountId) && attempt.accountId.length > 0)) &&
     (attempt.status === 'PENDING' || attempt.status === 'UNKNOWN') &&
     request.clientRequestId === attempt.clientRequestId &&
     typeof customer === 'object' &&
@@ -132,6 +136,7 @@ function isPendingAttempt(value: unknown): value is PendingOrderAttempt {
         typeof line === 'object' &&
         line !== null &&
         isText(line.productId) &&
+        (line.variantId === undefined || isText(line.variantId)) &&
         typeof line.quantity === 'number' &&
         Number.isInteger(line.quantity) &&
         line.quantity > 0
@@ -157,7 +162,7 @@ export async function loadPendingAttempt(): Promise<PendingOrderAttempt | null> 
   let attempt: PendingOrderAttempt | null = null;
   if (result.ok && typeof result.value === 'object' && result.value !== null) {
     const stored = result.value as { version?: unknown; attempt?: unknown };
-    if (stored.version === SCHEMA_VERSION && isPendingAttempt(stored.attempt)) {
+    if ((stored.version === 2 || stored.version === SCHEMA_VERSION) && isPendingAttempt(stored.attempt)) {
       attempt = stored.attempt;
     }
   }

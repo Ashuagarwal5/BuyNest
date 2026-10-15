@@ -45,7 +45,10 @@ export function normalizeMobileNumber(input: string): string | null {
   return MOBILE_PATTERN.test(digits) ? digits : null;
 }
 
-export function validateCheckoutDetails(details: CheckoutDetails): CheckoutErrors {
+export function validateCheckoutDetails(
+  details: CheckoutDetails,
+  selectedArea?: { pincode?: string | null }
+): CheckoutErrors {
   const errors: CheckoutErrors = {};
 
   if (details.fullName.trim().length < 2) {
@@ -70,6 +73,9 @@ export function validateCheckoutDetails(details: CheckoutDetails): CheckoutError
     errors.pincode = 'Enter your pincode';
   } else if (!PINCODE_PATTERN.test(details.pincode.trim())) {
     errors.pincode = 'Pincode must be 6 digits';
+  } else if (selectedArea && selectedArea.pincode !== details.pincode.trim()) {
+    errors.pincode =
+      'Delivery is unavailable for this pincode in the selected area. Check your address or choose another delivery area.';
   }
 
   if (details.deliveryAreaId === null) {

@@ -46,7 +46,7 @@ export type CreateOrderRequest = {
     pincode: string;
   };
   deliveryAreaId: string;
-  items: { productId: string; quantity: number }[];
+  items: { productId: string; variantId?: string; quantity: number }[];
   paymentMethod: PaymentMethod;
 };
 
@@ -69,6 +69,10 @@ function parseOrder(value: unknown): Order {
     items: asArray(dto.items, (entry) => {
       const item = asObject(entry);
       return {
+        id: asNullableString(item.id) ?? asString(item.productId),
+        variantId: asNullableString(item.variantId),
+        packLabel: asNullableString(item.packLabel),
+        components: item.components === undefined ? [] : asArray(item.components,c=>{const v=asObject(c);return {productName:asString(v.productName),unitsPerPack:asInteger(v.unitsPerPack)};}),
         productId: asString(item.productId),
         productName: asString(item.productName),
         productImage: asNullableString(item.productImage),
@@ -109,10 +113,11 @@ export type PlacedOrder = {
  * Callers must not use this directly: go through the orders context, which persists the
  * request before sending it so it can be replayed after a restart.
  */
-export function createOrder(request: CreateOrderRequest): Promise<PlacedOrder> {
+export function createOrder(request: CreateOrderRequest, accountToken: string): Promise<PlacedOrder> {
   return apiRequest('/orders', {
     method: 'POST',
     body: request,
+    headers: { Authorization: `Bearer ${accountToken}` },
     timeoutMs: ORDER_REQUEST_TIMEOUT_MS,
     parse: (data) => {
       const order = parseOrder(data);
@@ -125,6 +130,34 @@ export function createOrder(request: CreateOrderRequest): Promise<PlacedOrder> {
         },
       };
     },
+  });
+}
+
+/** Account responses never contain tracking tokens or device-local credentials. */
+export function fetchAccountOrders(token: string, page = 1, signal?: AbortSignal) {
+  return apiRequest(`/account/orders?page=${page}&limit=25`, {
+    headers: { Authorization: `Bearer ${token}` }, signal,
+    parse: (data) => {
+      const dto = asObject(data);
+      const pagination = asObject(dto.pagination);
+      return {
+        items: asArray(dto.items, parseOrder),
+        page: asInteger(pagination.page),
+        hasMore: asInteger(pagination.page) < asInteger(pagination.totalPages),
+      };
+    },
+  });
+}
+
+export function fetchAccountOrder(token: string, orderNumber: string) {
+  return apiRequest(`/account/orders/${encodeURIComponent(orderNumber)}`, {
+    headers: { Authorization: `Bearer ${token}` }, parse: parseOrder,
+  });
+}
+
+export function cancelAccountOrder(token: string, orderNumber: string) {
+  return apiRequest(`/account/orders/${encodeURIComponent(orderNumber)}/cancel`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` }, parse: parseOrder,
   });
 }
 

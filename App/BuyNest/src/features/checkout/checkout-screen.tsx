@@ -1,7 +1,8 @@
+import { cartProductKey } from '@/features/cart/product-pack';
 import { useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -20,6 +21,7 @@ import {
 } from '@/features/addresses/address-types';
 import { useAddresses } from '@/features/addresses/addresses-context';
 import { useCart } from '@/features/cart/cart-context';
+import { useAuth } from '@/features/auth/auth-context';
 import {
   type CheckoutDetails,
   type CheckoutErrors,
@@ -39,7 +41,8 @@ import { UnconfirmedOrderNotice } from '@/features/orders/components/unconfirmed
 import { useOrders } from '@/features/orders/order-context';
 import { useApiData } from '@/hooks/use-api-data';
 import { useTheme } from '@/hooks/use-theme';
-import type { ApiError } from '@/services/api/api-error';
+import { type ApiError, toApiError } from '@/services/api/api-error';
+import type { Account } from '@/services/api/auth-api';
 import { fetchDeliveryAreas } from '@/services/api/catalog-api';
 import type { DeliveryArea } from '@/types/delivery';
 import type { PaymentMethod } from '@/types/order';
@@ -61,6 +64,8 @@ const SCREEN_EDGES = ['left', 'right', 'bottom'] as const;
  */
 function describeSubmitError(error: ApiError): string {
   switch (error.code) {
+    case 'CATALOG_CHANGED':
+    case 'QUANTITY_LIMIT':
     case 'OUT_OF_STOCK':
     case 'PRODUCT_UNAVAILABLE':
     case 'PRODUCT_NOT_FOUND':
@@ -77,13 +82,40 @@ function describeSubmitError(error: ApiError): string {
 }
 
 export function CheckoutScreen() {
+  const { state, retrySession } = useAuth();
+  const router = useRouter();
+  if (state.status === 'loading') return <Screen edges={SCREEN_EDGES}><LoadingState /></Screen>;
+  if (state.status === 'error') return <Screen edges={SCREEN_EDGES}><ErrorState error={state.error} onRetry={retrySession} /></Screen>;
+  if (state.status === 'signedOut') {
+    return (
+      <Screen edges={SCREEN_EDGES}>
+        <EmptyState icon="account" title={state.reason === 'expired' ? 'Your sign-in has ended' : 'Login required'}
+          message="Please log in or create an account to continue with your order."
+          actionLabel="Login" onAction={() => router.push({ pathname: '/sign-in', params: { next: 'checkout' } })} />
+        <PrimaryButton title="Create Account" variant="secondary" onPress={() => router.push({ pathname: '/register', params: { next: 'checkout' } })} />
+        <PrimaryButton title="Continue Shopping" variant="secondary" onPress={() => router.dismissTo('/')} />
+      </Screen>
+    );
+  }
+  return <ValidatedCheckout key={state.token} token={state.token} />;
+}
+
+function ValidatedCheckout({ token }: { token: string }) {
+  const { validateSession } = useAuth();
+  const session = useApiData(`checkout-session:${token}`, (signal) => validateSession(signal));
+  if (session.status === 'loading') return <Screen edges={SCREEN_EDGES}><LoadingState /></Screen>;
+  if (session.status === 'error') return <Screen edges={SCREEN_EDGES}><ErrorState error={session.error} onRetry={session.reload} /></Screen>;
+  return <CheckoutForm account={session.data.account} />;
+}
+
+function CheckoutForm({ account }: { account: Account | null }) {
   const theme = useTheme();
   const router = useRouter();
   const headerHeight = useHeaderHeight();
   const { lines, subtotal, isHydrated, clearIfMatches, refreshProducts } = useCart();
   const { submitOrder, pending, pendingReady, isSubmitting } = useOrders();
   const areaList = useApiData('delivery-areas', fetchDeliveryAreas);
-  const { addresses, isHydrated: addressesReady, add: addAddress } = useAddresses();
+  const { addresses, isHydrated: addressesReady, error: addressesError, reload: reloadAddresses, add: addAddress } = useAddresses();
 
   const [details, setDetails] = useState<CheckoutDetails>(emptyCheckoutDetails);
   const [touched, setTouched] = useState<Partial<Record<CheckoutField, boolean>>>({});
@@ -92,12 +124,20 @@ export function CheckoutScreen() {
   // The saved address in use, or null while the customer types a different one.
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [saveForLater, setSaveForLater] = useState(true);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [editSavedAddress, setEditSavedAddress] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const hasEdited = useRef(false);
   const hasAppliedDefault = useRef(false);
+  const isActive = useRef(true);
+  useEffect(() => {
+    isActive.current = true;
+    return () => { isActive.current = false; };
+  }, []);
 
   useEffect(() => {
+    if (account) return;
     let isActive = true;
     loadSavedCheckoutDetails().then((saved) => {
       if (isActive && saved && !hasEdited.current && !hasAppliedDefault.current) {
@@ -107,7 +147,7 @@ export function CheckoutScreen() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [account]);
 
   // Once the saved addresses are read, start from the default one (unless the customer has begun typing).
   const applyDefaultAddress = useEffectEvent(() => {
@@ -116,13 +156,15 @@ export function CheckoutScreen() {
       hasAppliedDefault.current = true;
       setDetails(toCheckoutDetails(preferred));
       setSelectedAddressId(preferred.id);
+    } else if (account && !hasEdited.current) {
+      setDetails((current) => ({ ...current, fullName: account.fullName ?? '', phone: account.mobile ?? '' }));
     }
   });
   useEffect(() => {
     if (addressesReady) {
       applyDefaultAddress();
     }
-  }, [addressesReady]);
+  }, [addressesReady, addresses]);
 
   // The summary below is an estimate, so start it from current prices and stock.
   const refreshCart = useEffectEvent(() => {
@@ -135,7 +177,7 @@ export function CheckoutScreen() {
   }, [isHydrated]);
 
   // Nothing is shown (or sent) until the device has been checked for an unconfirmed order.
-  if (!isHydrated || !pendingReady || areaList.status === 'loading') {
+  if (!isHydrated || !pendingReady || !addressesReady || areaList.status === 'loading') {
     return (
       <Screen edges={SCREEN_EDGES}>
         <LoadingState />
@@ -143,7 +185,7 @@ export function CheckoutScreen() {
     );
   }
 
-  if (lines.length === 0 && !isSubmitting) {
+  if (lines.length === 0 && !isSubmitting && !isSavingAddress) {
     return (
       <Screen edges={SCREEN_EDGES}>
         {/* The cart can be empty while an earlier order is still unconfirmed. */}
@@ -169,6 +211,7 @@ export function CheckoutScreen() {
       </Screen>
     );
   }
+  if (addressesError) return <Screen edges={SCREEN_EDGES}><ErrorState error={addressesError} onRetry={reloadAddresses} /></Screen>;
 
   const areas = areaList.data;
   // A remembered area that the shop no longer serves is treated as not selected.
@@ -179,7 +222,10 @@ export function CheckoutScreen() {
   }));
   const estimate = selectedArea ? calculateOrderTotals(pricedLines, selectedArea) : null;
 
-  const errors = validateCheckoutDetails({ ...details, deliveryAreaId: selectedArea?.id ?? null });
+  const errors = validateCheckoutDetails(
+    { ...details, deliveryAreaId: selectedArea?.id ?? null },
+    selectedArea
+  );
   const visibleErrors: CheckoutErrors = {};
   for (const field of Object.keys(errors) as CheckoutField[]) {
     if (hasSubmitted || touched[field]) {
@@ -196,6 +242,7 @@ export function CheckoutScreen() {
   };
 
   const selectSavedAddress = (address: SavedAddress) => {
+    setEditSavedAddress(false);
     hasEdited.current = true;
     setSubmitError(null);
     setDetails(toCheckoutDetails(address));
@@ -218,6 +265,7 @@ export function CheckoutScreen() {
   };
 
   const handlePlaceOrder = async () => {
+    if (isSavingAddress || isSubmitting) return;
     setHasSubmitted(true);
     const mobile = normalizeMobileNumber(details.phone);
     if (hasErrors(errors) || !selectedArea || mobile === null) {
@@ -240,13 +288,14 @@ export function CheckoutScreen() {
         pincode: details.pincode.trim(),
       },
       deliveryAreaId: selectedArea.id,
-      items: lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
+      items: lines.map((line) => ({ productId: line.product.id, ...(line.product.variantId ? {variantId:line.product.variantId} : {}), quantity: line.quantity })),
       paymentMethod: PAYMENT_METHOD,
     });
 
     if (result.ok) {
+      if (!isActive.current) { clearIfMatches(result.cartFingerprint); return; }
       // Losing the remembered details only costs convenience, so this is not awaited.
-      saveCheckoutDetails(details);
+      if (!account) saveCheckoutDetails(details);
       // A new address the customer chose to keep joins the address book (once, and within the limit).
       if (
         saveForLater &&
@@ -254,14 +303,22 @@ export function CheckoutScreen() {
         addresses.length < MAX_SAVED_ADDRESSES &&
         !addresses.some((address) => isSameAddress(address, details))
       ) {
-        addAddress({
-          ...details,
-          phone: mobile,
-          deliveryAreaId: selectedArea.id,
-          label: addresses.length === 0 ? 'Home' : 'Other',
-          isDefault: addresses.length === 0,
-        });
+        setIsSavingAddress(true);
+        try {
+          await addAddress({
+            ...details,
+            phone: mobile,
+            deliveryAreaId: selectedArea.id,
+            label: addresses.length === 0 ? 'Home' : 'Other',
+            isDefault: addresses.length === 0,
+          });
+        } catch (error) {
+          if (isActive.current) Alert.alert('Order placed', `Your order is confirmed, but the address could not be saved. ${toApiError(error).message}`);
+        } finally {
+          if (isActive.current) setIsSavingAddress(false);
+        }
       }
+      if (!isActive.current) { clearIfMatches(result.cartFingerprint); return; }
       // replace, not push: Back from the success screen must never return to this form.
       router.replace({ pathname: '/order-success/[id]', params: { id: result.order.orderNumber } });
       // Only the cart this order was made from is cleared, never a newer one.
@@ -270,6 +327,9 @@ export function CheckoutScreen() {
     }
 
     switch (result.kind) {
+      case 'AUTH_REQUIRED':
+        setSubmitError('Sign in to the account used for your earlier order, then retry. Your pending order has been kept.');
+        return;
       case 'BUSY':
       case 'NOTHING_PENDING':
         // A request is already on its way (a double tap); nothing to add.
@@ -287,7 +347,7 @@ export function CheckoutScreen() {
         // The server refused the order, so nothing was created and the customer can adjust.
         setSubmitError(describeSubmitError(result.error));
         const { code } = result.error;
-        if (code === 'OUT_OF_STOCK' || code === 'PRODUCT_UNAVAILABLE' || code === 'PRODUCT_NOT_FOUND') {
+        if (code === 'CATALOG_CHANGED' || code === 'QUANTITY_LIMIT' || code === 'OUT_OF_STOCK' || code === 'PRODUCT_UNAVAILABLE' || code === 'PRODUCT_NOT_FOUND') {
           refreshProducts();
         }
         if (code === 'DELIVERY_AREA_UNAVAILABLE' || code === 'DELIVERY_AREA_NOT_FOUND') {
@@ -311,6 +371,10 @@ export function CheckoutScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}>
           <UnconfirmedOrderNotice navigation="replace" />
+          <View>
+            <AppText variant="heading">Almost there</AppText>
+            <AppText variant="caption" color="textSecondary">Confirm your delivery details and pay cash when your order arrives.</AppText>
+          </View>
 
           {addresses.length > 0 ? (
             <SavedAddressPicker
@@ -321,20 +385,33 @@ export function CheckoutScreen() {
             />
           ) : null}
 
-          <AddressForm
+          {selectedAddressId && !editSavedAddress && !hasErrors(visibleErrors) ? (
+            <SectionCard title="Delivery contact">
+              <AppText variant="bodyStrong">{details.fullName}</AppText>
+              <AppText color="textSecondary">{details.phone}</AppText>
+              <PrimaryButton title="Edit contact or address" size="small" variant="secondary" onPress={() => setEditSavedAddress(true)} />
+            </SectionCard>
+          ) : <AddressForm
+            compact
             details={details}
             errors={visibleErrors}
             onChange={(field, value) => updateDetails({ [field]: value })}
             onBlur={(field) => setTouched((current) => ({ ...current, [field]: true }))}
-          />
+          />}
 
-          <SectionCard title="Delivery Area">
+          <SectionCard title="Delivery area">
+            <AppText variant="caption" color="textSecondary">Choose the area that serves your address to confirm delivery charges.</AppText>
             <DeliveryAreaSelector
               areas={areas}
               selectedAreaId={selectedArea?.id ?? null}
               onSelect={selectArea}
               error={visibleErrors.deliveryAreaId}
             />
+            {selectedArea && /^[1-9]\d{5}$/.test(details.pincode.trim()) ? (
+              <AppText variant="captionStrong" color={errors.pincode ? 'danger' : 'success'} accessibilityLiveRegion="polite">
+                {errors.pincode ? errors.pincode : `Delivery available for ${details.pincode.trim()}`}
+              </AppText>
+            ) : null}
             {selectedArea && minimumShortfall > 0 ? (
               <AppText variant="caption" color="danger">
                 Minimum order for {selectedArea.name} is{' '}
@@ -361,9 +438,10 @@ export function CheckoutScreen() {
             </View>
           ) : null}
 
-          <SectionCard title="Order Summary">
+          <SectionCard title="Your order">
+            <PrimaryButton title="Edit cart" variant="secondary" size="small" onPress={() => router.back()} />
             {lines.map((line) => (
-              <View key={line.product.id} style={styles.line}>
+              <View key={cartProductKey(line.product)} style={styles.line}>
                 <OrderItemRow
                   name={line.product.name}
                   quantity={line.quantity}
@@ -379,11 +457,11 @@ export function CheckoutScreen() {
             ))}
           </SectionCard>
 
-          <SectionCard title="Payment Method">
+          <SectionCard title="Pay on delivery">
             <PaymentMethodSection method={PAYMENT_METHOD} />
           </SectionCard>
 
-          <SectionCard title="Price Summary">
+          <SectionCard title="Price details">
             {estimate ? (
               <>
                 <PriceSummary totals={estimate} />
@@ -426,8 +504,8 @@ export function CheckoutScreen() {
             </View>
             <View style={styles.flex}>
               <PrimaryButton
-                title="Place Order"
-                loading={isSubmitting}
+                title="Place order · COD"
+                loading={isSubmitting || isSavingAddress}
                 // A new order cannot be sent while an earlier one is unconfirmed.
                 disabled={areas.length === 0 || pending !== null}
                 onPress={handlePlaceOrder}

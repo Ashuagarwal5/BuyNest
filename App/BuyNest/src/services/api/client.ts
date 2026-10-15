@@ -6,9 +6,10 @@ import {
   REQUEST_TIMEOUT_MS,
 } from '@/services/api/config';
 import { asObject } from '@/services/api/parse';
+import { withRequestTimeout } from '@/services/api/request-lifecycle';
 
 type RequestOptions<T> = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   /** Sent as JSON. */
   body?: unknown;
   headers?: Record<string, string>;
@@ -40,20 +41,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions<T>): P
     throw new ApiError('CONFIGURATION_ERROR');
   }
 
-  const controller = new AbortController();
-  let didTimeOut = false;
-  const timeout = setTimeout(() => {
-    didTimeOut = true;
-    controller.abort();
-  }, options.timeoutMs ?? REQUEST_TIMEOUT_MS);
-
-  const forwardAbort = () => controller.abort();
-  options.signal?.addEventListener('abort', forwardAbort);
-
-  let response: Response;
-  let payload: unknown;
-  try {
-    response = await fetch(`${options.unversioned ? API_BASE_URL : API_V1_URL}${path}`, {
+  const { response, payload } = await withRequestTimeout(async (signal) => {
+    const response = await fetch(`${options.unversioned ? API_BASE_URL : API_V1_URL}${path}`, {
       method: options.method ?? 'GET',
       headers: {
         Accept: 'application/json',
@@ -61,16 +50,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions<T>): P
         ...options.headers,
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: controller.signal,
+      signal,
     });
     // Read inside the try: the timeout also has to cover a body that never finishes.
-    payload = await response.json().catch(() => undefined);
-  } catch {
-    throw new ApiError(didTimeOut ? 'TIMEOUT' : 'NETWORK_ERROR');
-  } finally {
-    clearTimeout(timeout);
-    options.signal?.removeEventListener('abort', forwardAbort);
-  }
+    const payload: unknown = await response.json().catch(() => undefined);
+    return { response, payload };
+  }, options.signal, options.timeoutMs ?? REQUEST_TIMEOUT_MS);
 
   if (!response.ok) {
     throw toErrorFromResponse(response.status, payload);
@@ -80,7 +65,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions<T>): P
   if (envelope.success !== true) {
     throw new ApiError('MALFORMED_RESPONSE', { status: response.status });
   }
-  return options.parse(envelope.data);
+  try {
+    return options.parse(envelope.data);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('MALFORMED_RESPONSE', { status: response.status });
+  }
 }
 
 function toErrorFromResponse(status: number, payload: unknown): ApiError {
