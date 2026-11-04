@@ -52,12 +52,17 @@ model Category {
   imageUrl     String?
   isActive     Boolean  @default(true)
   displayOrder Int      @default(0)
+  // Null for a top-level category. Only two levels are allowed (Toys > Soft Toys); the service enforces it.
+  parentId     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
   products Product[]
 
   @@index([isActive, displayOrder])
+  @@index([parentId])
 }
 
 enum ProductKind {
@@ -72,6 +77,8 @@ model Product {
   description       String
   categoryId        String
   sku               String   @unique
+  // Optional free-text brand name, e.g. "Funskool". Kept as text until brands need their own data.
+  brand             String?
   mrpPaise          Int
   sellingPricePaise Int
   kind ProductKind @default(STANDARD)
@@ -86,6 +93,19 @@ model Product {
   // The migration adds CHECK constraints keeping 0 <= reservedQuantity <= stockQuantity.
   reservedQuantity  Int      @default(0)
   lowStockThreshold Int      @default(5)
+  // STANDARD only: keep taking orders at zero stock. reservedQuantity may then exceed
+  // stockQuantity, and the order can only be delivered once the stock has arrived.
+  allowBackorder    Boolean  @default(false)
+  // What one unit costs the shop to buy. Admin-only: never part of a customer response.
+  procurementCostPaise Int?
+  // GST slab in percent (0, 5, 12, 18 or 28). Selling prices are GST-inclusive.
+  gstRatePercent    Int?
+  hsnCode           String?
+  // Packed size, for planning deliveries. Grams and millimetres keep them whole numbers.
+  weightGrams       Int?
+  lengthMm          Int?
+  widthMm           Int?
+  heightMm          Int?
   isActive          Boolean  @default(true)
   isFeatured        Boolean  @default(false)
   isNew             Boolean  @default(false)
@@ -100,6 +120,7 @@ model Product {
   reviews Review[]
 
   @@index([categoryId])
+  @@index([brand])
   @@index([isActive, isFeatured])
   @@index([isActive, isNew])
 }

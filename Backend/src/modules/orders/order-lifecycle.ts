@@ -8,6 +8,8 @@ import { physicalLines } from '../catalog/product-offers.js';
  * Stock model: placing an order RESERVES units (reservedQuantity goes up, stockQuantity is
  * untouched). Cancelling RELEASES them. Delivering SELLS them: both reservedQuantity and
  * stockQuantity go down by the ordered quantity. Available stock = stockQuantity - reservedQuantity.
+ * A product that takes backorders may reserve more than it holds; such an order can only be
+ * delivered once enough stock has been added.
  */
 
 import type { OrderStatus } from '../../generated/prisma/client.js';
@@ -156,6 +158,18 @@ export async function recordSale(
         AND "stockQuantity" >= ${item.quantity}::int
     `;
     if (soldRows !== 1) {
+      // A backordered product can be reserved beyond its stock; it ships once stock arrives.
+      const product = await tx.product.findUnique({
+        where: { id: item.productId },
+        select: { name: true, stockQuantity: true, reservedQuantity: true },
+      });
+      if (product && product.reservedQuantity >= item.quantity && product.stockQuantity < item.quantity) {
+        throw conflict(
+          'STOCK_NOT_RECEIVED',
+          `Only ${product.stockQuantity} of ${product.name} are in stock and this order needs ${item.quantity}. Add the received stock in Inventory before delivering.`,
+          { productId: item.productId, stockQuantity: product.stockQuantity, requiredQuantity: item.quantity }
+        );
+      }
       throw conflict(
         'INVENTORY_MISMATCH',
         'The reserved stock for this order does not add up, so it was not changed.',
@@ -172,6 +186,38 @@ export async function recordSale(
       quantity: item.quantity,
       adminUserId,
     })),
+  });
+}
+
+/**
+ * The exact opposite of `recordSale`, for correcting an order marked delivered by mistake:
+ * stockQuantity AND reservedQuantity go back up, so the order is again a reservation. The
+ * history shows an ADJUSTMENT (the shelf stock returning) and a RESERVE (the hold returning),
+ * both tied to the order and carrying `note`.
+ */
+export async function reverseSale(
+  tx: TransactionClient,
+  orderId: string,
+  items: OrderLine[],
+  note: string,
+  adminUserId: string
+): Promise<void> {
+  const lines = inLockOrder(items);
+  for (const item of lines) {
+    await tx.$executeRaw`
+      UPDATE "Product"
+      SET "stockQuantity" = "stockQuantity" + ${item.quantity}::int,
+          "reservedQuantity" = "reservedQuantity" + ${item.quantity}::int,
+          "updatedAt" = NOW()
+      WHERE "id" = ${item.productId}
+    `;
+  }
+
+  await tx.inventoryTransaction.createMany({
+    data: lines.flatMap((item) => [
+      { productId: item.productId, orderId, type: 'ADJUSTMENT' as const, quantity: item.quantity, note, adminUserId },
+      { productId: item.productId, orderId, type: 'RESERVE' as const, quantity: item.quantity, note, adminUserId },
+    ]),
   });
 }
 

@@ -8,17 +8,36 @@ export const offerInclude = {
   comboComponents: { include: { product: { include: { category: { select: { isActive: true } } } } }, orderBy: { productId: 'asc' as const } },
 } satisfies Prisma.ProductInclude;
 type OfferProduct = Prisma.ProductGetPayload<{ include: typeof offerInclude }>;
-export function offerAvailability(product: OfferProduct): number {
-  if (product.kind === 'STANDARD') return product.stockQuantity - product.reservedQuantity;
+type StockFields = { stockQuantity: number; reservedQuantity: number; allowBackorder: boolean };
+
+/** What a backorderable product offers once its stock runs out: the most one order line may ask for. */
+export const BACKORDER_ORDERABLE_UNITS = 999;
+
+/** Units of one ordinary product customers may order right now. Backorders keep it above zero. */
+export function orderableUnits(product: StockFields): number {
+  const free = product.stockQuantity - product.reservedQuantity;
+  return product.allowBackorder ? Math.max(free, BACKORDER_ORDERABLE_UNITS) : free;
+}
+
+/** Units of one ordinary product on the shelf and not yet promised: what can be delivered without a restock. */
+export function readyUnits(product: StockFields): number {
+  return Math.max(product.stockQuantity - product.reservedQuantity, 0);
+}
+
+/** How many of an offer can be ordered (by default) or delivered from stock now (with `readyUnits`). */
+export function offerAvailability(product: OfferProduct, units: (product: StockFields) => number = orderableUnits): number {
+  if (product.kind === 'STANDARD') return units(product);
   if (product.comboComponents.length < 2) return 0;
-  return Math.min(...product.comboComponents.map(c => c.product.kind !== 'STANDARD' || !c.product.isActive || !c.product.category.isActive ? 0 : Math.floor((c.product.stockQuantity - c.product.reservedQuantity) / c.quantity)));
+  return Math.min(...product.comboComponents.map(c => c.product.kind !== 'STANDARD' || !c.product.isActive || !c.product.category.isActive ? 0 : Math.floor(units(c.product) / c.quantity)));
 }
 export function offerDetails(product: OfferProduct, publicView = false) {
   const available = offerAvailability(product);
+  const ready = offerAvailability(product, readyUnits);
+  const usable = (c: OfferProduct['comboComponents'][number]) => c.product.kind === 'STANDARD' && c.product.isActive && c.product.category.isActive;
   return {
     kind: product.kind,
-    variants: product.variants.filter(v => !publicView || v.isActive).map(v => ({ ...v, availableQuantity: Math.floor(available / v.unitsPerPack) })),
-    comboComponents: product.comboComponents.map(c => ({ productId: c.productId, quantity: c.quantity, productName: c.product.name, sku: c.product.sku, availableQuantity: c.product.kind === 'STANDARD' && c.product.isActive && c.product.category.isActive ? c.product.stockQuantity - c.product.reservedQuantity : 0 })),
+    variants: product.variants.filter(v => !publicView || v.isActive).map(v => ({ ...v, availableQuantity: Math.floor(available / v.unitsPerPack), readyQuantity: Math.floor(ready / v.unitsPerPack) })),
+    comboComponents: product.comboComponents.map(c => ({ productId: c.productId, quantity: c.quantity, productName: c.product.name, sku: c.product.sku, availableQuantity: usable(c) ? orderableUnits(c.product) : 0, readyQuantity: usable(c) ? readyUnits(c.product) : 0 })),
   };
 }
 export type ComponentSnapshot = { productId: string; productName: string; sku: string; unitsPerPack: number };

@@ -7,11 +7,12 @@ import { AppError } from '../../../lib/errors.js';
 import { sendSuccess } from '../../../lib/http.js';
 import { prisma } from '../../../lib/prisma.js';
 import { getAdmin, requireAdmin } from '../../../middleware/admin-auth.js';
-import { verifyAgainstDummy, verifyPassword } from './password.js';
+import { hashPassword, validateNewPassword, verifyAgainstDummy, verifyPassword } from './password.js';
 import {
   clearSessionCookie,
   createSession,
   readSessionToken,
+  revokeOtherSessions,
   revokeSession,
   setSessionCookie,
 } from './session.js';
@@ -25,6 +26,12 @@ const loginBodySchema = z.strictObject({
   email: z.string().trim().min(3).max(254),
   // No strength rules here: those apply when a password is chosen, not when it is used.
   password: z.string().min(1).max(200),
+});
+
+const changePasswordBodySchema = z.strictObject({
+  currentPassword: z.string().min(1).max(200),
+  // Strength rules are applied in the handler so their message is shown as is.
+  newPassword: z.string().min(1).max(200),
 });
 
 /** Sign-in failures all look the same, whatever the reason, so they reveal nothing. */
@@ -85,6 +92,47 @@ export function createAdminAuthRouter(loginRateLimit: LoginRateLimit) {
     }
     clearSessionCookie(res);
     sendSuccess(res, { loggedOut: true });
+  });
+
+  const passwordLimiter = rateLimit({
+    windowMs: loginRateLimit.windowMs,
+    limit: loginRateLimit.limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+    handler: (_req, _res, next) =>
+      next(new AppError(429, 'TOO_MANY_REQUESTS', 'Too many attempts. Try again later.')),
+  });
+
+  /**
+   * Changes the signed-in admin's own password. The current password must be right (a stolen
+   * session alone cannot take over the account), and every OTHER session of this admin is
+   * signed out; this browser stays signed in.
+   */
+  router.post('/change-password', requireAdmin, passwordLimiter, async (req, res) => {
+    const body = changePasswordBodySchema.parse(req.body);
+    const { id, sessionId } = getAdmin(res);
+
+    const admin = await prisma.adminUser.findUnique({ where: { id } });
+    if (!admin || !(await verifyPassword(body.currentPassword, admin.passwordHash))) {
+      throw new AppError(422, 'INVALID_CREDENTIALS', 'Your current password is not correct.');
+    }
+    const problem = validateNewPassword(body.newPassword);
+    if (problem) {
+      throw new AppError(400, 'VALIDATION_ERROR', problem);
+    }
+    if (body.newPassword === body.currentPassword) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Choose a password different from the current one.');
+    }
+
+    await prisma.adminUser.update({
+      where: { id },
+      data: { passwordHash: await hashPassword(body.newPassword) },
+    });
+    await revokeOtherSessions(id, sessionId);
+
+    console.log(`[admin] ${admin.email} changed their password`);
+    sendSuccess(res, { changed: true });
   });
 
   router.get('/me', requireAdmin, (_req, res) => {

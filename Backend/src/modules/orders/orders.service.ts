@@ -76,7 +76,8 @@ function toPlacedOrder(order: OrderWithRelations): PlacedOrder {
  * Reserves stock with a single atomic statement. The WHERE clause re-checks availability
  * at the moment of the write and the UPDATE takes a row lock, so of two orders racing
  * for the last unit exactly one matches a row; the other sees zero rows and is rejected.
- * A read-then-write in application code could not guarantee that.
+ * A read-then-write in application code could not guarantee that. A product that takes
+ * backorders is reserved even beyond its stock.
  *
  * Prisma's query builder cannot express "stock - reserved >= quantity", hence the raw SQL.
  */
@@ -90,7 +91,7 @@ async function tryReserveStock(
     SET "reservedQuantity" = "reservedQuantity" + ${quantity}::int, "updatedAt" = NOW()
     WHERE "id" = ${productId}
       AND "isActive" = true
-      AND "stockQuantity" - "reservedQuantity" >= ${quantity}::int
+      AND ("allowBackorder" OR "stockQuantity" - "reservedQuantity" >= ${quantity}::int)
   `;
   return updatedRows === 1;
 }

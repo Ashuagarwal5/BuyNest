@@ -34,6 +34,11 @@ export const changeOrderStatusBodySchema = z.strictObject({
   note: optionalNote,
 });
 
+export const reopenDeliveryBodySchema = z.strictObject({
+  /** Required: the reason is the only record of why a delivered order was changed. */
+  reason: z.string().trim().min(5, 'Give a reason of at least 5 characters.').max(300),
+});
+
 export const recordPaymentBodySchema = z.strictObject({
   paymentStatus: z.enum(PaymentStatus),
   note: optionalNote,

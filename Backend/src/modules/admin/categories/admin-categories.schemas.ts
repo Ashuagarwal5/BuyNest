@@ -21,6 +21,14 @@ const categoryFields = {
     .transform((value) => value ?? null),
   displayOrder: z.number().int().min(0).max(100_000),
   isActive: z.boolean(),
+  /** A top-level category has no parent. Only one level of nesting is allowed. */
+  parentId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .nullish()
+    .transform((value) => value ?? null),
 };
 
 export const createCategoryBodySchema = z.strictObject({
@@ -31,6 +39,7 @@ export const createCategoryBodySchema = z.strictObject({
   imageUrl: categoryFields.imageUrl,
   displayOrder: categoryFields.displayOrder.default(0),
   isActive: categoryFields.isActive.default(true),
+  parentId: categoryFields.parentId.optional(),
 });
 
 export const updateCategoryBodySchema = z
@@ -41,6 +50,7 @@ export const updateCategoryBodySchema = z
     imageUrl: categoryFields.imageUrl,
     displayOrder: categoryFields.displayOrder,
     isActive: categoryFields.isActive,
+    parentId: categoryFields.parentId,
   })
   .partial()
   .refine((body) => Object.keys(body).length > 0, { message: 'Send at least one field to change' });

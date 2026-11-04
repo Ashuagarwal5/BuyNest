@@ -142,7 +142,7 @@ Expo Router is being used.
 
 The mobile application currently exists at approximately:
 
-BuyNest/app/BuyNest
+BuyNest/App/BuyNest
 
 Do not create another React Native project unless absolutely necessary.
 
@@ -220,7 +220,7 @@ TypeScript
 
 Location approximately:
 
-app/BuyNest
+App/BuyNest
 
 This is the application customers will use.
 

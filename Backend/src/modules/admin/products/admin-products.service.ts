@@ -18,7 +18,7 @@ import type {
 
 const productInclude = {
   ...offerInclude,
-  category: { select: { id: true, name: true, slug: true } },
+  category: { select: { id: true, name: true, slug: true, parent: { select: { id: true, name: true } } } },
   images: { orderBy: { displayOrder: 'asc' } },
 } satisfies Prisma.ProductInclude;
 
@@ -29,7 +29,9 @@ type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof productIn
  * orders that have not been delivered or cancelled yet.
  */
 function toAdminProduct(product: ProductWithRelations) {
-  const availableQuantity = offerAvailability(product);
+  // Admins see the true balance, which is negative while backorders wait for stock.
+  const availableQuantity =
+    product.kind === 'STANDARD' ? product.stockQuantity - product.reservedQuantity : offerAvailability(product);
   return {
     ...offerDetails(product),
     id: product.id,
@@ -38,6 +40,7 @@ function toAdminProduct(product: ProductWithRelations) {
     description: product.description,
     categoryId: product.categoryId,
     category: product.category,
+    brand: product.brand,
     sku: product.sku,
     mrpPaise: product.mrpPaise,
     sellingPricePaise: product.sellingPricePaise,
@@ -49,6 +52,14 @@ function toAdminProduct(product: ProductWithRelations) {
     isActive: product.isActive,
     isFeatured: product.isFeatured,
     isNew: product.isNew,
+    allowBackorder: product.allowBackorder,
+    procurementCostPaise: product.procurementCostPaise,
+    gstRatePercent: product.gstRatePercent,
+    hsnCode: product.hsnCode,
+    weightGrams: product.weightGrams,
+    lengthMm: product.lengthMm,
+    widthMm: product.widthMm,
+    heightMm: product.heightMm,
     images: product.images.map((image) => ({
       id: image.id,
       url: image.url,
@@ -136,13 +147,17 @@ function imageRows(images: CreateProductBody['images']) {
 export async function listProducts(query: ListProductsQuery) {
   const where: Prisma.ProductWhereInput = {
     ...(query.kind ? { kind: query.kind } : {}),
-    ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+    ...(query.categoryId
+      ? { category: { OR: [{ id: query.categoryId }, { parentId: query.categoryId }] } }
+      : {}),
+    ...(query.brand ? { brand: { equals: query.brand, mode: 'insensitive' as const } } : {}),
     ...(query.isActive === undefined ? {} : { isActive: query.isActive }),
     ...(query.search
       ? {
           OR: [
             { name: { contains: query.search, mode: 'insensitive' } },
             { sku: { contains: query.search, mode: 'insensitive' } },
+            { brand: { contains: query.search, mode: 'insensitive' } },
           ],
         }
       : {}),
@@ -196,6 +211,7 @@ export async function createProduct(body: CreateProductBody, admin: AdminContext
         slug,
         description: body.description,
         categoryId: body.categoryId,
+        brand: body.brand,
         sku: body.sku,
         mrpPaise: body.mrpPaise,
         sellingPricePaise: body.sellingPricePaise,
@@ -204,6 +220,14 @@ export async function createProduct(body: CreateProductBody, admin: AdminContext
         isFeatured: body.isFeatured,
         isNew: body.isNew,
         isActive: body.isActive,
+        allowBackorder: body.allowBackorder ?? false,
+        procurementCostPaise: body.procurementCostPaise ?? null,
+        gstRatePercent: body.gstRatePercent ?? null,
+        hsnCode: body.hsnCode ?? null,
+        weightGrams: body.weightGrams ?? null,
+        lengthMm: body.lengthMm ?? null,
+        widthMm: body.widthMm ?? null,
+        heightMm: body.heightMm ?? null,
         images: { create: imageRows(body.images) },
         // Opening stock is a stock movement like any other, so the audit trail starts complete.
         ...(body.stockQuantity > 0
@@ -260,6 +284,11 @@ export async function updateProduct(id: string, body: UpdateProductBody) {
 
   const { images, comboComponents, ...fields } = body;
   if (comboComponents && existing.kind !== 'COMBO') throw conflict('INVALID_COMBO','Only combos may have contents.');
+  if (fields.allowBackorder && existing.kind === 'COMBO') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'A combo cannot take backorders.', [
+      { field: 'allowBackorder', message: 'A combo cannot take backorders: its stock comes from its contents' },
+    ]);
+  }
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -274,6 +303,14 @@ export async function updateProduct(id: string, body: UpdateProductBody) {
       // Recheck partial price updates after locking, including concurrent edits.
       const current = await tx.product.findUniqueOrThrow({where:{id}});
       if ((fields.sellingPricePaise ?? current.sellingPricePaise) > (fields.mrpPaise ?? current.mrpPaise)) throw conflict('INVALID_PRICE','Selling price cannot exceed MRP.');
+      // Orders already taken beyond stock must be covered before backorders can stop.
+      if (fields.allowBackorder === false && current.reservedQuantity > current.stockQuantity) {
+        throw conflict(
+          'BACKORDERS_OPEN',
+          `Open orders need ${current.reservedQuantity - current.stockQuantity} more units than are in stock. Add that stock before turning backorders off.`,
+          { stockQuantity: current.stockQuantity, reservedQuantity: current.reservedQuantity }
+        );
+      }
       await tx.product.update({ where: { id }, data: fields });
       if (images !== undefined) {
         await tx.productImage.deleteMany({ where: { productId: id } });
@@ -293,7 +330,9 @@ export async function updateProduct(id: string, body: UpdateProductBody) {
  * Changes stock on hand by a signed amount and records why. This is the ONLY way to change
  * stockQuantity by hand. The write refuses to take stock below what open orders have
  * reserved, so an adjustment can never leave an order without the units it was promised.
- * The check is part of the UPDATE, so it holds even when orders arrive at the same moment.
+ * A backorderable product is already promised more than it holds, so for it only stock
+ * below zero is refused. The check is part of the UPDATE, so it holds even when orders
+ * arrive at the same moment.
  */
 export async function adjustInventory(
   id: string,
@@ -306,18 +345,26 @@ export async function adjustInventory(
       SET "stockQuantity" = "stockQuantity" + ${body.quantityDelta}::int, "updatedAt" = NOW()
       WHERE "id" = ${id}
         AND "kind" = 'STANDARD'
-        AND "stockQuantity" + ${body.quantityDelta}::int >= "reservedQuantity"
+        AND "stockQuantity" + ${body.quantityDelta}::int >= CASE WHEN "allowBackorder" THEN 0 ELSE "reservedQuantity" END
     `;
 
     if (updatedRows !== 1) {
       const product = await tx.product.findUnique({
         where: { id },
-        select: { stockQuantity: true, reservedQuantity: true, kind: true },
+        select: { stockQuantity: true, reservedQuantity: true, kind: true, allowBackorder: true },
       });
       if (!product) {
         throw notFound('PRODUCT_NOT_FOUND', 'This product does not exist.');
       }
       if (product.kind === 'COMBO') throw conflict('COMBO_STOCK_MANAGED','Combo stock comes from its component products. Adjust those products instead.');
+      if (product.allowBackorder) {
+        throw conflict('ADJUSTMENT_BELOW_ZERO', `Stock cannot go below zero: only ${product.stockQuantity} units are on hand.`, {
+          stockQuantity: product.stockQuantity,
+          reservedQuantity: product.reservedQuantity,
+          requestedDelta: body.quantityDelta,
+          lowestAllowedDelta: -product.stockQuantity,
+        });
+      }
       const available = product.stockQuantity - product.reservedQuantity;
       throw conflict(
         'ADJUSTMENT_BELOW_RESERVED',

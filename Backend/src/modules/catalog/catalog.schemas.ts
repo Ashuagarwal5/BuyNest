@@ -17,6 +17,8 @@ export const listProductsQuerySchema = z
     limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(20),
     /** Category slug. */
     category: z.string().trim().min(1).max(100).optional(),
+    /** Brand name, matched ignoring case. */
+    brand: z.string().trim().min(1).max(100).optional(),
     featured: booleanFlag.optional(),
     /**
      * Comma-separated product ids: fetches exactly those products (the app's wishlist uses it).

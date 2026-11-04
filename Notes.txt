@@ -1,0 +1,21 @@
+Terminal 1: database (folder C:\Ashu\projects\BuyNest\Backend)
+cd C:\Ashu\projects\BuyNest\Backend
+npm run db:dev
+
+
+
+Terminal 2: API (folder Backend)
+cd C:\Ashu\projects\BuyNest\Backend
+npm run dev
+
+
+
+Terminal 3: admin panel (folder Admin\Frontend)
+cd C:\Ashu\projects\BuyNest\Admin\Frontend
+npm run dev
+
+
+
+Terminal 4: For Start App 
+cd C:\Ashu\projects\BuyNest\App\BuyNest
+npm start

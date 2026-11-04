@@ -3,12 +3,16 @@ import { Router } from 'express';
 import { sendSuccess } from '../../lib/http.js';
 import { listProductsQuerySchema, productIdentifierParamsSchema } from './catalog.schemas.js';
 import { readSettings, shopInfo } from '../settings/settings.service.js';
-import { getProduct, listCategories, listDeliveryAreas, listProducts } from './catalog.service.js';
+import { getProduct, listBrands, listCategories, listDeliveryAreas, listProducts } from './catalog.service.js';
 
 export const catalogRouter = Router();
 
 catalogRouter.get('/categories', async (_req, res) => {
   sendSuccess(res, await listCategories());
+});
+
+catalogRouter.get('/brands', async (_req, res) => {
+  sendSuccess(res, await listBrands());
 });
 
 catalogRouter.get('/products', async (req, res) => {

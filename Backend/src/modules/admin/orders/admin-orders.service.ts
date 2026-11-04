@@ -13,6 +13,7 @@ import {
   ORDER_TRANSITIONS,
   recordSale,
   releaseReservations,
+  reverseSale,
   statusesThatCanMoveTo,
 } from '../../orders/order-lifecycle.js';
 import type { ListOrdersQuery } from './admin-orders.schemas.js';
@@ -239,6 +240,66 @@ export async function changeOrderStatus(
     await emitOrderStatusEvent(tx, id, to, history.id);
   });
 
+  return getOrderDetail(id);
+}
+
+/**
+ * Correction for an order marked DELIVERED by mistake: it goes back to OUT_FOR_DELIVERY, so it
+ * can be delivered properly or marked failed. Super admins only (see the route), with a reason
+ * that is written to the order's history.
+ *
+ * Refused once cash is recorded as collected, or once any return/refund case exists: after
+ * that the order has financial consequences that a status flip would not undo. The claim
+ * locks the order first, which is also the lock return-case changes take, so the two cannot
+ * interleave. The sale is reversed in the same transaction. The customer is not notified.
+ */
+export async function reopenDeliveredOrder(
+  id: string,
+  reason: string,
+  admin: AdminContext
+): Promise<AdminOrderDetail> {
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.order.updateMany({
+      where: { id, orderStatus: 'DELIVERED', paymentStatus: 'PENDING' },
+      data: { orderStatus: 'OUT_FOR_DELIVERY', deliveredAt: null },
+    });
+
+    if (count === 0) {
+      const current = await tx.order.findUnique({
+        where: { id },
+        select: { orderStatus: true, paymentStatus: true },
+      });
+      if (!current) {
+        throw notFound('ORDER_NOT_FOUND', 'This order does not exist.');
+      }
+      if (current.orderStatus !== 'DELIVERED') {
+        throw conflict('INVALID_ORDER_TRANSITION', 'Only a delivered order can be corrected.', {
+          from: current.orderStatus,
+        });
+      }
+      throw unprocessable(
+        'ORDER_CORRECTION_NOT_ALLOWED',
+        'Cash has already been recorded as collected for this order, so the delivery cannot be reopened.'
+      );
+    }
+
+    if ((await tx.returnCase.count({ where: { orderId: id } })) > 0) {
+      throw unprocessable(
+        'ORDER_CORRECTION_NOT_ALLOWED',
+        'This order has a return or refund case, so the delivery cannot be reopened.'
+      );
+    }
+
+    const items = await tx.orderItem.findMany({
+      where: { orderId: id },
+      select: { productId: true, quantity: true, components: { select: { productId: true, unitsPerPack: true } } },
+    });
+    const note = `Delivery correction by ${admin.name}: ${reason}`.slice(0, 500);
+    await reverseSale(tx, id, items, note, admin.id);
+    await addStatusHistory(tx, id, 'OUT_FOR_DELIVERY', `Correction: ${reason}`.slice(0, 500), admin.id);
+  });
+
+  console.log(`[orders] ${admin.email} reopened a delivered order (${id})`);
   return getOrderDetail(id);
 }
 

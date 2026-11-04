@@ -83,6 +83,11 @@ export async function revokeAllSessions(adminUserId: string): Promise<void> {
   await prisma.adminSession.deleteMany({ where: { adminUserId } });
 }
 
+/** Signs an admin out everywhere except the session `keepSessionId`. */
+export async function revokeOtherSessions(adminUserId: string, keepSessionId: string): Promise<void> {
+  await prisma.adminSession.deleteMany({ where: { adminUserId, id: { not: keepSessionId } } });
+}
+
 function cookieOptions(): CookieOptions {
   return {
     httpOnly: true, // script on the page can never read it

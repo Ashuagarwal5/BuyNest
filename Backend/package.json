@@ -17,6 +17,7 @@
     "db:dev": "tsx scripts/dev-db.ts",
     "db:reset-dev": "tsx scripts/reset-dev-data.ts",
     "seed:demo": "tsx scripts/seed-demo-catalog.ts",
+    "seed:catalog": "tsx scripts/seed-catalog.ts",
     "secrets:key": "tsx scripts/make-secrets-key.ts",
     "db:studio": "prisma studio --config prisma7.config.ts",
     "admin:create": "tsx scripts/create-admin.ts",
