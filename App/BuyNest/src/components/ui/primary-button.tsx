@@ -1,4 +1,5 @@
-import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import type { ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { MinTouchTarget, Radius, Spacing } from '@/constants/theme';
@@ -14,6 +15,8 @@ type PrimaryButtonProps = {
   /** Shows a spinner and blocks presses while work is in progress. */
   loading?: boolean;
   accessibilityLabel?: string;
+  /** Drawn before the title, such as a brand mark. */
+  icon?: ReactNode;
 };
 
 export function PrimaryButton({
@@ -24,6 +27,7 @@ export function PrimaryButton({
   disabled = false,
   loading = false,
   accessibilityLabel,
+  icon,
 }: PrimaryButtonProps) {
   const theme = useTheme();
   const isPrimary = variant === 'primary';
@@ -52,9 +56,12 @@ export function PrimaryButton({
       {loading ? (
         <ActivityIndicator color={theme[contentColor]} />
       ) : (
-        <AppText variant={size === 'small' ? 'captionStrong' : 'bodyStrong'} color={contentColor}>
-          {title}
-        </AppText>
+        <View style={styles.content}>
+          {icon}
+          <AppText variant={size === 'small' ? 'captionStrong' : 'bodyStrong'} color={contentColor}>
+            {title}
+          </AppText>
+        </View>
       )}
     </Pressable>
   );
@@ -75,6 +82,11 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.small,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
   },
   pressed: {
     opacity: 0.8,

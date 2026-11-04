@@ -5,6 +5,8 @@ export type Category = {
   description: string;
   imageUrl: string | null;
   displayOrder: number;
+  /** Null for a top-level category; a subcategory points at its parent (one level only). */
+  parentId: string | null;
 };
 
 /**
@@ -18,7 +20,7 @@ export type Product = {
   baseName?: string;
   unitsPerPack?: number;
   physicalStockQuantity?: number;
-  variants?: {id:string;label:string;unitsPerPack:number;mrp:number;sellingPrice:number;availableQuantity:number}[];
+  variants?: {id:string;label:string;unitsPerPack:number;mrp:number;sellingPrice:number;availableQuantity:number;readyQuantity?:number}[];
   comboComponents?: {productId:string;productName:string;quantity:number;availableQuantity:number}[];
   id: string;
   name: string;
@@ -35,6 +37,11 @@ export type Product = {
   sellingPrice: number;
   /** Units a customer can order right now (stock minus units held by other orders). */
   stockQuantity: number;
+  /**
+   * Units that can be delivered from stock now. Lower than stockQuantity only when the shop
+   * takes backorders: the rest are delivered after a restock. Missing in older saved carts.
+   */
+  readyQuantity?: number;
   isFeatured: boolean;
   isNew: boolean;
 };

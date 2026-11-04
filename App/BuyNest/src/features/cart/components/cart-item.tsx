@@ -7,6 +7,7 @@ import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { Radius, Shadows, Spacing } from '@/constants/theme';
 import { type CartLine, useCart } from '@/features/cart/cart-context';
 import { ProductImage } from '@/features/catalog/components/product-image';
+import { describeRestockWait } from '@/features/catalog/stock-status';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCurrency } from '@/utils/money';
 
@@ -18,6 +19,7 @@ export function CartItem({ line }: CartItemProps) {
   const theme = useTheme();
   const { increment, decrement, removeItem } = useCart();
   const { product, quantity, lineTotal } = line;
+  const restockNote = describeRestockWait(product, quantity);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -33,6 +35,10 @@ export function CartItem({ line }: CartItemProps) {
         {line.issue ? (
           <AppText variant="captionStrong" color="danger">
             {line.issue}
+          </AppText>
+        ) : restockNote ? (
+          <AppText variant="caption" color="accent">
+            {restockNote}
           </AppText>
         ) : null}
         <QuantitySelector

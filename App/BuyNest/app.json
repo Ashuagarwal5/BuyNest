@@ -3,7 +3,7 @@
     "name": "DoorKart",
     "slug": "doorkart",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "doorkart",
     "userInterfaceStyle": "automatic",
@@ -41,6 +41,15 @@
         "expo-notifications",
         {
           "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
         }
       ]
     ],

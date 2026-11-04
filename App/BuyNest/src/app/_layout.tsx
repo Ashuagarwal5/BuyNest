@@ -6,6 +6,7 @@ import { AuthProvider } from '@/features/auth/auth-context';
 import { CartProvider } from '@/features/cart/cart-context';
 import { NotificationsProvider } from '@/features/notifications/notifications-context';
 import { OrdersProvider } from '@/features/orders/order-context';
+import { ThemePreferenceProvider } from '@/features/theme/theme-context';
 import { WishlistProvider } from '@/features/wishlist/wishlist-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
@@ -16,6 +17,14 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
+  return (
+    <ThemePreferenceProvider>
+      <AppNavigator />
+    </ThemePreferenceProvider>
+  );
+}
+
+function AppNavigator() {
   const colorScheme = useColorScheme();
   const theme = useTheme();
 
@@ -73,8 +82,9 @@ export default function RootLayout() {
                   <Stack.Screen name="help" options={{ title: 'Help & Support' }} />
                   <Stack.Screen name="about" options={{ title: 'About DoorKart' }} />
                   <Stack.Screen name="address/[id]" options={{ title: 'Address' }} />
+                  <Stack.Screen name="appearance" options={{ title: 'Appearance' }} />
                 </Stack>
-                <StatusBar style="auto" />
+                <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
               </ThemeProvider>
             </AddressesProvider>
           </WishlistProvider>

@@ -1,6 +1,7 @@
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { type ReactNode, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { ErrorState } from '@/components/ui/error-state';
@@ -9,8 +10,11 @@ import { Icon } from '@/components/ui/icon';
 import { LoadingState } from '@/components/ui/loading-state';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
-import { MinTouchTarget, Radius, Spacing } from '@/constants/theme';
+import { TextLink } from '@/components/ui/text-link';
+import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/auth-context';
+import { AuthHeader } from '@/features/auth/components/auth-header';
+import { VerifyCodePanel } from '@/features/auth/components/verify-code-panel';
 import { isExpoGo, signInWithGoogle } from '@/features/auth/google-sign-in';
 import { isAddressNext, isCheckoutNext } from '@/features/auth/registration-form';
 import { useOtpTimers } from '@/features/auth/use-otp-timers';
@@ -104,95 +108,98 @@ function SignInOptions({ config }: { config: AuthConfig }) {
   };
 
   const hasAnyMethod = config.google.enabled || config.emailEnabled;
+  const isBusy = isGoogleBusy || isEmailBusy;
+  const cardStyle = [styles.card, { backgroundColor: theme.surface, borderColor: theme.border }];
+
+  const googleSection = config.google.enabled ? (
+    <View style={styles.section}>
+      {config.emailEnabled ? (
+        <View style={styles.divider}>
+          <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+          <AppText variant="caption" color="textSecondary">or</AppText>
+          <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+        </View>
+      ) : null}
+      <PrimaryButton
+        title="Continue with Google"
+        variant="secondary"
+        icon={
+          <Image
+            source={require('../../../assets/images/google-g.svg')}
+            style={styles.googleIcon}
+            contentFit="contain"
+            accessible={false}
+          />
+        }
+        loading={isGoogleBusy}
+        disabled={isEmailBusy}
+        onPress={continueWithGoogle}
+      />
+      {googleError ? (
+        <AppText variant="caption" color="danger" accessibilityRole="alert">
+          {googleError}
+        </AppText>
+      ) : null}
+    </View>
+  ) : null;
+
+  const openRegistration = () =>
+    router.push(
+      isCheckoutNext(next)
+        ? { pathname: '/register', params: { next: 'checkout' } }
+        : isAddressNext(next)
+          ? { pathname: '/register', params: { next: 'address' } }
+          : '/register'
+    );
 
   return (
     <Screen edges={['left', 'right', 'bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.intro}>
-            <View style={styles.brandRow}>
-              <View style={[styles.brandIcon, { backgroundColor: theme.primarySoft }]}>
-                <Icon name="store" size={28} color="primary" />
-              </View>
-              <AppText variant="heading" color="primary">DoorKart</AppText>
-            </View>
-            <AppText variant="title" accessibilityRole="header">
-              Welcome back
-            </AppText>
-            <AppText color="textSecondary">
-              Sign in for easy checkout, saved addresses and your order history.
-            </AppText>
-            {isCheckoutNext(next) ? (
-              <View style={[styles.checkoutNote, { backgroundColor: theme.primarySoft }]}>
-                <Icon name="cart" size={20} color="primary" />
-                <AppText variant="caption" color="primary" style={styles.noteText}>Your cart is saved. Sign in to continue checkout.</AppText>
-              </View>
-            ) : null}
-          </View>
+          <AuthHeader
+            title="Welcome to DoorKart"
+            subtitle="Sign in for faster checkout, saved addresses and order tracking."
+            showCartNote={isCheckoutNext(next)}
+          />
 
           {!hasAnyMethod ? (
-            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={cardStyle}>
               <Icon name="info" size={28} color="primary" />
               <AppText variant="heading">Sign-in is unavailable</AppText>
               <AppText color="textSecondary">Please try again later. You can keep browsing and adding items to your cart.</AppText>
             </View>
-          ) : null}
-
-          {config.google.enabled ? (
-            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <AppText variant="bodyStrong">Sign in with Google</AppText>
-              <AppText variant="caption" color="textSecondary">Use your Google account to get started quickly.</AppText>
-              <PrimaryButton
-                title="Continue with Google"
-                variant={config.emailEnabled ? 'secondary' : 'primary'}
-                loading={isGoogleBusy}
-                disabled={isEmailBusy}
-                onPress={continueWithGoogle}
+          ) : config.emailEnabled ? (
+            <View style={cardStyle}>
+              <EmailCodeFlow
+                config={config}
+                blocked={isGoogleBusy}
+                onBusyChange={setIsEmailBusy}
+                onSignedIn={done}
+                googleSection={googleSection}
               />
-              {googleError ? (
-                <AppText variant="caption" color="danger" accessibilityRole="alert">
-                  {googleError}
-                </AppText>
-              ) : null}
             </View>
-          ) : null}
-
-          {config.google.enabled && config.emailEnabled ? (
-            <View style={styles.divider}>
-              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
-              <AppText variant="caption" color="textSecondary">or use your email</AppText>
-              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+          ) : (
+            <View style={cardStyle}>
+              {googleSection}
+              <AppText variant="caption" color="textSecondary" style={styles.centerText}>
+                Email sign-in is currently unavailable.
+              </AppText>
             </View>
-          ) : null}
+          )}
 
-          {config.emailEnabled ? (
-            <EmailCodeFlow config={config} blocked={isGoogleBusy} onBusyChange={setIsEmailBusy} onSignedIn={done} />
-          ) : null}
           {config.registration.enabled ? (
             <View style={styles.signup}>
-              <AppText variant="caption" color="textSecondary">New to DoorKart?</AppText>
-              <PrimaryButton
-                title="Create an account"
-                variant="secondary"
-                disabled={isGoogleBusy || isEmailBusy}
-                onPress={() => router.push(isCheckoutNext(next) ? { pathname: '/register', params: { next: 'checkout' } } : isAddressNext(next) ? { pathname: '/register', params: { next: 'address' } } : '/register')}
-              />
+              <AppText color="textSecondary">New to DoorKart?</AppText>
+              <TextLink title="Create an account" disabled={isBusy} onPress={openRegistration} />
             </View>
           ) : null}
-          {!config.emailEnabled && hasAnyMethod ? (
-            <AppText variant="caption" color="textSecondary" style={styles.centerText}>Email sign-in is currently unavailable. Use Google to sign in.</AppText>
-          ) : null}
+
           <View style={styles.footer}>
-            <View style={[styles.brandRow, styles.footerCaption]}>
-              <Icon name="account" size={18} color="textSecondary" />
-              <AppText variant="caption" color="textSecondary" style={styles.noteText}>Your account, addresses and orders in one place.</AppText>
+            <TextLink title="Continue shopping as a guest" disabled={isBusy} onPress={() => router.dismissTo('/')} />
+            <View style={styles.trustRow}>
+              <Icon name="account" size={16} color="textSecondary" />
+              <AppText variant="caption" color="textSecondary">No password needed. Sign in with a one-time code.</AppText>
             </View>
-            <Pressable accessibilityRole="button" disabled={isGoogleBusy || isEmailBusy}
-              accessibilityState={{ disabled: isGoogleBusy || isEmailBusy }}
-              onPress={() => router.dismissTo('/')}
-              style={({ pressed }) => [styles.shoppingLink, pressed && styles.pressed]}>
-              <AppText variant="captionStrong" color="primary">Continue shopping</AppText>
-            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -201,14 +208,15 @@ function SignInOptions({ config }: { config: AuthConfig }) {
 }
 
 /** Step 1: type your email. Step 2: type the 6-digit code that was sent to it. */
-function EmailCodeFlow({ config, blocked, onBusyChange, onSignedIn }: {
+function EmailCodeFlow({ config, blocked, onBusyChange, onSignedIn, googleSection }: {
   config: AuthConfig;
   blocked: boolean;
   onBusyChange: (busy: boolean) => void;
   onSignedIn: () => void;
+  /** Other sign-in options, shown below the email button on the first step only. */
+  googleSection: ReactNode;
 }) {
   const { completeSignIn } = useAuth();
-  const theme = useTheme();
   const busy = useRef(false);
   const timers = useOtpTimers();
   const [email, setEmail] = useState('');
@@ -253,11 +261,11 @@ function EmailCodeFlow({ config, blocked, onBusyChange, onSignedIn }: {
     }
   };
 
-  const verify = async () => {
+  const verify = async (enteredCode: string) => {
     if (busy.current || blocked || timers.secondsToExpiry <= 0 || failedAttempts >= config.otp.maxAttempts) {
       return;
     }
-    if (!/^\d{6}$/.test(code)) {
+    if (!/^\d{6}$/.test(enteredCode)) {
       setError('Enter the 6-digit code from the email.');
       return;
     }
@@ -266,7 +274,7 @@ function EmailCodeFlow({ config, blocked, onBusyChange, onSignedIn }: {
     setIsBusy(true);
     onBusyChange(true);
     try {
-      await completeSignIn(await verifyEmailCode(trimmedEmail, code));
+      await completeSignIn(await verifyEmailCode(trimmedEmail, enteredCode));
       onSignedIn();
     } catch (caught) {
       const apiError = toApiError(caught);
@@ -281,14 +289,15 @@ function EmailCodeFlow({ config, blocked, onBusyChange, onSignedIn }: {
 
   if (step === 'email') {
     return (
-      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <AppText variant="heading">Sign in with email</AppText>
-        <AppText variant="caption" color="textSecondary">We’ll send a one-time code. No password needed.</AppText>
+      <View style={styles.section}>
         <FormField
           label="Email address"
           placeholder="you@example.com"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => {
+            setEmail(text);
+            if (error) setError(null);
+          }}
           keyboardType="email-address"
           autoCapitalize="none"
           autoComplete="email"
@@ -299,57 +308,40 @@ function EmailCodeFlow({ config, blocked, onBusyChange, onSignedIn }: {
           error={error ?? undefined}
           editable={!isBusy && !blocked}
         />
-        <PrimaryButton title="Send sign-in code" loading={isBusy} disabled={blocked} onPress={sendCode} />
+        <PrimaryButton title="Continue with email" loading={isBusy} disabled={blocked} onPress={sendCode} />
+        <AppText variant="caption" color="textSecondary" style={styles.centerText}>
+          We’ll email you a 6-digit code to sign in.
+        </AppText>
+        {googleSection}
       </View>
     );
   }
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <View style={[styles.codeIcon, { backgroundColor: theme.primarySoft }]}><Icon name="account" size={28} color="primary" /></View>
-      <AppText variant="heading">Check your email</AppText>
-      <AppText color="textSecondary">
-        We sent a 6-digit code to <AppText variant="bodyStrong">{trimmedEmail}</AppText>. It can take a minute. Check
-        your spam folder too.
-      </AppText>
-      <AppText variant="caption" color={timers.secondsToExpiry > 0 ? 'textSecondary' : 'danger'}>
-        {timers.secondsToExpiry > 0 ? `Your code expires in ${timers.secondsToExpiry}s.` : 'This code has expired. Request a new code.'}
-      </AppText>
-      <FormField
-        label="6-digit code"
-        value={code}
-        onChangeText={(text) => setCode(text.replace(/\D/g, '').slice(0, 6))}
-        keyboardType="number-pad"
-        autoComplete="one-time-code"
-        textContentType="oneTimeCode"
-        maxLength={6}
-        placeholder="000000"
-        style={styles.codeInput}
-        returnKeyType="done"
-        onSubmitEditing={verify}
-        error={error ?? undefined}
-        editable={!isBusy && !blocked}
-      />
-      {failedAttempts >= config.otp.maxAttempts ? <AppText color="danger" accessibilityRole="alert">The attempt limit has been reached. Request a new code.</AppText> : null}
-      <PrimaryButton title="Verify and sign in" loading={isBusy} disabled={blocked || timers.secondsToExpiry <= 0 || failedAttempts >= config.otp.maxAttempts} onPress={verify} />
-      <PrimaryButton
-        title={timers.secondsToResend > 0 ? `Send a new code in ${timers.secondsToResend}s` : 'Send a new code'}
-        variant="secondary"
-        disabled={blocked || isBusy || timers.secondsToResend > 0}
-        onPress={sendCode}
-      />
-      <PrimaryButton
-        title="Use a different email"
-        variant="secondary"
-        disabled={isBusy || blocked}
-        onPress={() => {
-          setStep('email');
-          setError(null);
-          setCode('');
-          timers.reset();
-        }}
-      />
-    </View>
+    <VerifyCodePanel
+      email={trimmedEmail}
+      code={code}
+      onCodeChange={(next) => {
+        setCode(next);
+        if (error) setError(null);
+      }}
+      onVerify={verify}
+      onResend={sendCode}
+      onChangeEmail={() => {
+        setStep('email');
+        setError(null);
+        setCode('');
+        timers.reset();
+      }}
+      changeEmailLabel="Change email"
+      verifyLabel="Verify and sign in"
+      secondsToExpiry={timers.secondsToExpiry}
+      secondsToResend={timers.secondsToResend}
+      error={error}
+      isBusy={isBusy}
+      disabled={blocked}
+      attemptsExhausted={failedAttempts >= config.otp.maxAttempts}
+    />
   );
 }
 
@@ -363,29 +355,18 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.five,
     gap: Spacing.four,
   },
-  intro: {
-    gap: Spacing.two,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.two,
-  },
   card: {
-    padding: Spacing.three,
+    padding: Spacing.four,
     gap: Spacing.three,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.large,
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  brandIcon: { width: 48, height: 48, borderRadius: Radius.medium, alignItems: 'center', justifyContent: 'center' },
-  checkoutNote: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.three, borderRadius: Radius.medium, marginTop: Spacing.two },
-  noteText: { flex: 1 },
+  section: { gap: Spacing.three },
   divider: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
-  dividerLine: { flex: 1, height: 1 },
-  signup: { gap: Spacing.two, alignItems: 'stretch' },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  googleIcon: { width: 20, height: 20 },
+  signup: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' },
   centerText: { textAlign: 'center' },
-  footer: { gap: Spacing.one, alignItems: 'center' },
-  footerCaption: { width: '100%' },
-  shoppingLink: { minHeight: MinTouchTarget, justifyContent: 'center', paddingHorizontal: Spacing.three },
-  pressed: { opacity: 0.7 },
-  codeIcon: { width: 48, height: 48, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
-  codeInput: { textAlign: 'center', letterSpacing: 6, fontSize: 24, minHeight: 56 },
+  footer: { alignItems: 'center', gap: Spacing.one },
+  trustRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
 });

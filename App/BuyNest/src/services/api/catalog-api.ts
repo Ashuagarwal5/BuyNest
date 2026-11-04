@@ -25,8 +25,14 @@ function parseCategory(value: unknown): Category {
     description: asNullableString(dto.description) ?? '',
     imageUrl: asNullableString(dto.imageUrl),
     displayOrder: asInteger(dto.displayOrder),
+    // A server that predates subcategories sends no parentId: everything it sends is top-level.
+    parentId: asNullableString(dto.parentId),
   };
 }
+
+/** A count a server that predates backorders does not send: missing stays undefined. */
+const optionalCount = (value: unknown): number | undefined =>
+  value === undefined ? undefined : Math.max(asInteger(value), 0);
 
 /** Converts the API's product shape into the app's, so screens do not depend on API field names. */
 function parseProduct(value: unknown): Product {
@@ -48,11 +54,12 @@ function parseProduct(value: unknown): Product {
     images: media.filter((item) => !item.isVideo).map((item) => item.url),
     videos: media.filter((item) => item.isVideo).map((item) => item.url),
     kind: dto.kind === 'COMBO' ? 'COMBO' : 'STANDARD',
-    variants: dto.variants === undefined ? [] : asArray(dto.variants, value => {const v=asObject(value);return {id:asString(v.id),label:asString(v.label),unitsPerPack:asInteger(v.unitsPerPack),mrp:asInteger(v.mrpPaise),sellingPrice:asInteger(v.sellingPricePaise),availableQuantity:asInteger(v.availableQuantity)};}),
+    variants: dto.variants === undefined ? [] : asArray(dto.variants, value => {const v=asObject(value);return {id:asString(v.id),label:asString(v.label),unitsPerPack:asInteger(v.unitsPerPack),mrp:asInteger(v.mrpPaise),sellingPrice:asInteger(v.sellingPricePaise),availableQuantity:asInteger(v.availableQuantity),readyQuantity:optionalCount(v.readyQuantity)};}),
     comboComponents: dto.comboComponents === undefined ? [] : asArray(dto.comboComponents, value => {const c=asObject(value);return {productId:asString(c.productId),productName:asString(c.productName),quantity:asInteger(c.quantity),availableQuantity:asInteger(c.availableQuantity)};}),
     mrp: asInteger(dto.mrpPaise),
     sellingPrice: asInteger(dto.sellingPricePaise),
     stockQuantity: Math.max(asInteger(dto.availableQuantity), 0),
+    readyQuantity: optionalCount(dto.readyQuantity),
     isFeatured: asBoolean(dto.isFeatured),
     isNew: asBoolean(dto.isNew),
   };

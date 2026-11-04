@@ -12,6 +12,8 @@ import { ConnectionCheck } from '@/features/account/components/connection-check'
 import { useAddresses } from '@/features/addresses/addresses-context';
 import { useAuth } from '@/features/auth/auth-context';
 import { useNotifications } from '@/features/notifications/notifications-context';
+import { THEME_OPTIONS } from '@/features/theme/appearance-screen';
+import { useThemePreference } from '@/features/theme/theme-context';
 import { useWishlist } from '@/features/wishlist/wishlist-context';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -34,7 +36,9 @@ export function AccountScreen() {
   const { addresses } = useAddresses();
   const { state } = useAuth();
   const { unreadCount } = useNotifications();
+  const { preference: themePreference } = useThemePreference();
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const themeLabel = THEME_OPTIONS.find(option => option.value === themePreference)?.title ?? 'Light';
 
   const rows: AccountRow[] = [
     { key: 'orders', icon: 'orders', title: 'My Orders', detail: 'Track purchases and deliveries', accessibilityLabel: 'My orders', onPress: () => router.navigate('/orders') },
@@ -71,6 +75,14 @@ export function AccountScreen() {
       accessibilityLabel: 'Help and Support',
       onPress: () => router.push('/help'),
     },
+    {
+      key: 'appearance',
+      icon: 'appearance',
+      title: 'Appearance',
+      detail: themeLabel,
+      accessibilityLabel: `Appearance, ${themeLabel}`,
+      onPress: () => router.push('/appearance'),
+    },
     ...(state.status === 'signedIn' ? [{ key: 'settings', icon: 'account' as const, title: 'Account settings', detail: 'Sign-in methods, sign out and deletion', accessibilityLabel: 'Account settings', onPress: () => router.push('/account-settings') }] : []),
     {
       key: 'about',
@@ -89,7 +101,7 @@ export function AccountScreen() {
 
         {[
           { title: 'Your shopping', rows: rows.filter(row => ['orders', 'reviews', 'wishlist', 'addresses'].includes(row.key)) },
-          { title: 'Support & settings', rows: rows.filter(row => ['help', 'about', 'settings'].includes(row.key)) },
+          { title: 'Support & settings', rows: rows.filter(row => ['appearance', 'help', 'about', 'settings'].includes(row.key)) },
         ].map(group => <View key={group.title} style={styles.group}>
           <AppText variant="captionStrong" color="textSecondary" style={styles.groupTitle}>{group.title}</AppText>
           <View style={[styles.list, { backgroundColor: theme.surface, borderColor: theme.border }]}>

@@ -26,11 +26,13 @@ const SERVICE_POINTS: { icon: IconName; label: string }[] = [
 const HOME_ROW_SIZE = 10;
 
 async function loadHome(signal: AbortSignal) {
-  const [categories, popular, newArrivals] = await Promise.all([
+  const [allCategories, popular, newArrivals] = await Promise.all([
     fetchCategories(signal),
     fetchProducts({ featured: true }, signal),
     fetchProducts({ isNew: true }, signal),
   ]);
+  // Home shows top-level categories only; a parent's row already includes its subcategories' products.
+  const categories = allCategories.filter((category) => category.parentId === null);
   const categoryRows = await Promise.all(
     categories.map(async (category) => ({
       category,

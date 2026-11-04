@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
@@ -13,6 +13,7 @@ import { SectionCard } from '@/components/ui/section-card';
 import { Radius, Spacing } from '@/constants/theme';
 import { useNotifications } from '@/features/notifications/notifications-context';
 import { OrderAddress } from '@/features/orders/components/order-address';
+import { OrderCelebration } from '@/features/orders/components/order-celebration';
 import { OrderStatusBadge } from '@/features/orders/components/status-badges';
 import { PAYMENT_METHOD_DISPLAY } from '@/features/orders/order-status';
 import { useTrackedOrder } from '@/features/orders/use-tracked-order';
@@ -28,6 +29,9 @@ export function OrderSuccessScreen() {
   // Checkout arrives here with the order the server just returned already in memory.
   const view = useTrackedOrder(orderNumber, false);
   const { permission, enablePush } = useNotifications();
+  // Plays once over the summary when the order first shows, then reveals it.
+  const [isCelebrating, setIsCelebrating] = useState(true);
+  const endCelebration = useCallback(() => setIsCelebrating(false), []);
 
   // The natural moment to ask: the customer has just placed an order and wants updates on it.
   useEffect(() => {
@@ -107,6 +111,9 @@ export function OrderSuccessScreen() {
           <PrimaryButton title="Continue Shopping" variant="secondary" onPress={goHome} />
         </View>
       </ScrollView>
+      {isCelebrating ? (
+        <OrderCelebration customerName={order.customerName} onDone={endCelebration} />
+      ) : null}
     </Screen>
   );
 }

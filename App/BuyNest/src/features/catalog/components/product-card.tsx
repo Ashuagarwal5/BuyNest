@@ -7,6 +7,7 @@ import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { MinTouchTarget, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useCart } from '@/features/cart/cart-context';
 import { ProductImage } from '@/features/catalog/components/product-image';
+import { getStockStatus } from '@/features/catalog/stock-status';
 import { WishlistButton } from '@/features/wishlist/components/wishlist-button';
 import { useTheme } from '@/hooks/use-theme';
 import type { Product } from '@/types/catalog';
@@ -16,9 +17,6 @@ type ProductCardProps = {
   product: Product;
   style?: StyleProp<ViewStyle>;
 };
-
-/** "Only 4 left" shows at or below this many units. */
-const LOW_STOCK_AT = 5;
 
 /**
  * A product in a list or row: a large picture with the discount and "New" tags and the wishlist
@@ -30,7 +28,7 @@ export function ProductCard({ product, style }: ProductCardProps) {
   const quantityInCart = getQuantity(product.id);
   const isOutOfStock = product.stockQuantity <= 0;
   const discount = getDiscountPercent(product.mrp, product.sellingPrice);
-  const isLowStock = !isOutOfStock && product.stockQuantity <= LOW_STOCK_AT;
+  const stockStatus = getStockStatus(product);
 
   return (
     <View
@@ -38,7 +36,7 @@ export function ProductCard({ product, style }: ProductCardProps) {
       <Link href={{ pathname: '/product/[id]', params: { id: product.id } }} asChild>
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel={`${product.name}, ${formatCurrency(product.sellingPrice)}${isOutOfStock ? ', out of stock' : ''}`}
+          accessibilityLabel={`${product.name}, ${formatCurrency(product.sellingPrice)}${isOutOfStock ? ', out of stock' : stockStatus.color === 'accent' ? `, ${stockStatus.label.toLowerCase()}` : ''}`}
           style={({ pressed }) => pressed && styles.pressed}>
           <View>
             <ProductImage product={product} style={styles.image} />
@@ -101,10 +99,10 @@ export function ProductCard({ product, style }: ProductCardProps) {
             {/* Always one line tall, so cards in a row stay the same height. */}
             <AppText
               variant="caption"
-              color={isLowStock ? 'accent' : 'textSecondary'}
+              color={stockStatus.color === 'accent' ? 'accent' : 'textSecondary'}
               numberOfLines={1}
               style={styles.stock}>
-              {isLowStock ? `Only ${product.stockQuantity} left` : isOutOfStock ? ' ' : 'In stock'}
+              {isOutOfStock ? ' ' : stockStatus.label}
             </AppText>
           </View>
         </Pressable>

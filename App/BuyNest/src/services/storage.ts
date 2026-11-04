@@ -24,6 +24,8 @@ export const StorageKeys = {
   installationId: 'doorkart:installation-id:v1',
   /** The customer's saved delivery addresses. */
   addresses: 'doorkart:addresses:v1',
+  /** The app theme the customer chose: 'light', 'dark' or 'system'. */
+  themePreference: 'doorkart:theme-preference:v1',
   /** Orders created on-device before the backend existed. Read-only; never sent anywhere. */
   legacyLocalOrders: 'buynest:orders:v1',
 } as const;

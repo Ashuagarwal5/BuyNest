@@ -9,11 +9,34 @@ type FormFieldProps = TextInputProps & {
   label: string;
   error?: string;
   optional?: boolean;
+  /** Fixed text inside the box before what the customer types, such as a country code. */
+  prefix?: string;
+  /** Guidance under the field, replaced by `error` when there is one. */
+  hint?: string;
   ref?: Ref<TextInput>;
 };
 
-export function FormField({ label, error, optional = false, style, ref, ...inputProps }: FormFieldProps) {
+export function FormField({ label, error, optional = false, prefix, hint, style, ref, ...inputProps }: FormFieldProps) {
   const theme = useTheme();
+  const boxColors = {
+    backgroundColor: theme.background,
+    borderColor: error ? theme.danger : theme.border,
+  };
+
+  const input = (
+    <TextInput
+      ref={ref}
+      accessibilityLabel={prefix ? `${label}, ${prefix}` : label}
+      placeholderTextColor={theme.textSecondary}
+      style={[
+        styles.input,
+        { color: theme.text },
+        prefix ? styles.prefixedInput : [styles.box, boxColors],
+        style,
+      ]}
+      {...inputProps}
+    />
+  );
 
   return (
     <View style={styles.container}>
@@ -26,24 +49,23 @@ export function FormField({ label, error, optional = false, style, ref, ...input
           </AppText>
         ) : null}
       </AppText>
-      <TextInput
-        ref={ref}
-        accessibilityLabel={label}
-        placeholderTextColor={theme.textSecondary}
-        style={[
-          styles.input,
-          {
-            color: theme.text,
-            backgroundColor: theme.background,
-            borderColor: error ? theme.danger : theme.border,
-          },
-          style,
-        ]}
-        {...inputProps}
-      />
+      {prefix ? (
+        <View style={[styles.box, styles.prefixRow, boxColors]}>
+          <AppText color="textSecondary" style={[styles.prefix, { borderColor: theme.border }]}>
+            {prefix}
+          </AppText>
+          {input}
+        </View>
+      ) : (
+        input
+      )}
       {error ? (
         <AppText variant="caption" color="danger" accessibilityLiveRegion="polite">
           {error}
+        </AppText>
+      ) : hint ? (
+        <AppText variant="caption" color="textSecondary">
+          {hint}
         </AppText>
       ) : null}
     </View>
@@ -54,6 +76,11 @@ const styles = StyleSheet.create({
   container: {
     gap: Spacing.one,
   },
+  box: {
+    minHeight: MinTouchTarget,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+  },
   input: {
     ...Typography.body,
     // A fixed line height misaligns single-line input text on Android.
@@ -61,7 +88,17 @@ const styles = StyleSheet.create({
     minHeight: MinTouchTarget,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
-    borderWidth: 1,
-    borderRadius: Radius.medium,
+  },
+  prefixRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  prefix: {
+    paddingHorizontal: Spacing.three,
+    borderRightWidth: 1,
+  },
+  prefixedInput: {
+    flex: 1,
   },
 });

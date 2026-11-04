@@ -11,19 +11,19 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { Screen } from '@/components/ui/screen';
-import { type ThemeColor, Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useCart } from '@/features/cart/cart-context';
 import { ProductReviews } from '@/features/reviews/product-reviews';
 import { WishlistButton } from '@/features/wishlist/components/wishlist-button';
 import { PriceDisplay } from '@/features/catalog/components/price-display';
 import { ProductGallery } from '@/features/catalog/components/product-gallery';
 import { PackOption } from '@/features/catalog/components/pack-option';
+import { describeRestockWait, getStockStatus } from '@/features/catalog/stock-status';
 import { useApiData } from '@/hooks/use-api-data';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchProduct } from '@/services/api/catalog-api';
 import type { Product } from '@/types/catalog';
 
-const LOW_STOCK_THRESHOLD = 5;
 const SCREEN_EDGES = ['left', 'right', 'bottom'] as const;
 
 export function ProductScreen() {
@@ -60,16 +60,6 @@ export function ProductScreen() {
   );
 }
 
-function getStockStatus(stock: number): { label: string; color: ThemeColor } {
-  if (stock <= 0) {
-    return { label: 'Out of stock', color: 'danger' };
-  }
-  if (stock <= LOW_STOCK_THRESHOLD) {
-    return { label: `Only ${stock} left`, color: 'accent' };
-  }
-  return { label: 'In stock', color: 'success' };
-}
-
 type ProductDetailsProps = {
   product: Product;
   isRefreshing: boolean;
@@ -89,7 +79,8 @@ function ProductDetails({ product, isRefreshing, onRefresh }: ProductDetailsProp
   const canAdd = remainingStock > 0;
   // Stock can shrink while this screen is open (items added elsewhere), so clamp on read.
   const quantity = Math.max(1, Math.min(selectedQuantity, remainingStock));
-  const stockStatus = getStockStatus(selectedProduct.stockQuantity);
+  const stockStatus = getStockStatus(selectedProduct);
+  const restockNote = describeRestockWait(selectedProduct, quantity, quantityInCart);
   const quantityLabel = variantId || product.kind === 'COMBO'
     ? quantity === 1 ? 'pack' : 'packs'
     : quantity === 1 ? 'item' : 'items';
@@ -172,6 +163,11 @@ function ProductDetails({ product, isRefreshing, onRefresh }: ProductDetailsProp
               canIncrement={quantity < remainingStock}
               canDecrement={quantity > 1}
             />
+            {restockNote ? (
+              <AppText variant="caption" color="accent" accessibilityLiveRegion="polite">
+                {restockNote}
+              </AppText>
+            ) : null}
             {quantityInCart > 0 ? (
               <AppText variant="caption" color="textSecondary" accessibilityLiveRegion="polite">
                 {canAdd

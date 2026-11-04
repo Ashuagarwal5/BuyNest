@@ -9,18 +9,22 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
+  type TextInput,
   View,
 } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
 import { ErrorState } from '@/components/ui/error-state';
 import { FormField } from '@/components/ui/form-field';
+import { Icon } from '@/components/ui/icon';
 import { LoadingState } from '@/components/ui/loading-state';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
-import { SectionCard } from '@/components/ui/section-card';
+import { TextLink } from '@/components/ui/text-link';
 import { MinTouchTarget, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/auth-context';
+import { AuthHeader } from '@/features/auth/components/auth-header';
+import { VerifyCodePanel } from '@/features/auth/components/verify-code-panel';
 import {
   isAddressNext,
   isCheckoutNext,
@@ -36,6 +40,9 @@ import { type AuthConfig, fetchAuthConfig, registerAccount, verifyRegistration }
 import { fetchShopInfo } from '@/services/api/catalog-api';
 
 const SCREEN_EDGES = ['left', 'right', 'bottom'] as const;
+/** DoorKart delivers locally, so mobile numbers are Indian; customers type only the 10 digits. */
+const MOBILE_PREFIX = '+91';
+const MOBILE_DIGITS = 10;
 
 export function RegisterScreen() {
   const config = useApiData('registration-config', (signal) => fetchAuthConfig(signal));
@@ -70,9 +77,11 @@ function RegistrationForm({ config }: { config: AuthConfig }) {
   const timers = useOtpTimers();
   const busy = useRef(false);
   const mounted = useRef(true);
+  const mobileInput = useRef<TextInput>(null);
+  const emailInput = useRef<TextInput>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [mobile, setMobile] = useState('+91 ');
+  const [mobileDigits, setMobileDigits] = useState('');
   const [email, setEmail] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [addAddress, setAddAddress] = useState(isAddressNext(next));
@@ -90,11 +99,18 @@ function RegistrationForm({ config }: { config: AuthConfig }) {
 
   const goToLogin = () => router.replace(isCheckoutNext(next) ? { pathname: '/sign-in', params: { next: 'checkout' } } : addAddress ? { pathname: '/sign-in', params: { next: 'address' } } : '/sign-in');
 
+  const clearFieldError = (field: keyof RegistrationFieldErrors) => {
+    if (errors[field]) setErrors((current) => ({ ...current, [field]: undefined }));
+  };
+
   const sendRegistration = async () => {
     if (busy.current || (step === 'code' && timers.secondsToResend > 0)) return;
-    const validation = validateRegistrationForm({ fullName, mobile, email, termsAccepted });
-    if (!validation.ok) {
-      setErrors(validation.errors);
+    const validation = validateRegistrationForm({ fullName, mobile: `${MOBILE_PREFIX}${mobileDigits}`, email, termsAccepted });
+    const fieldErrors: RegistrationFieldErrors = validation.ok ? {} : { ...validation.errors };
+    // The shared validator's message talks about country codes, which this form fills in itself.
+    if (mobileDigits.length !== MOBILE_DIGITS) fieldErrors.mobile = `Enter your ${MOBILE_DIGITS}-digit mobile number.`;
+    if (!validation.ok || fieldErrors.mobile) {
+      setErrors(fieldErrors);
       return;
     }
     busy.current = true;
@@ -123,9 +139,9 @@ function RegistrationForm({ config }: { config: AuthConfig }) {
     }
   };
 
-  const verify = async () => {
+  const verify = async (enteredCode: string) => {
     if (busy.current || !submitted || timers.secondsToExpiry <= 0 || failedAttempts >= config.otp.maxAttempts) return;
-    if (!/^\d{6}$/.test(code)) {
+    if (!/^\d{6}$/.test(enteredCode)) {
       setError('Enter the 6-digit code from your email.');
       return;
     }
@@ -133,7 +149,7 @@ function RegistrationForm({ config }: { config: AuthConfig }) {
     setIsBusy(true);
     setError(null);
     try {
-      const result = await verifyRegistration(submitted.email, code);
+      const result = await verifyRegistration(submitted.email, enteredCode);
       if (!mounted.current) return;
       await completeSignIn(result);
       router.replace(addAddress ? { pathname: '/address/[id]', params: { id: 'new', ...(isCheckoutNext(next) ? { next: 'checkout' } : {}) } } : isCheckoutNext(next) ? '/checkout' : '/account');
@@ -156,96 +172,158 @@ function RegistrationForm({ config }: { config: AuthConfig }) {
     }
   };
 
+  const cardStyle = [styles.card, { backgroundColor: theme.surface, borderColor: theme.border }];
+  const termsUrl = shop.status === 'success' ? shop.data.termsUrl : null;
+  const privacyUrl = shop.status === 'success' ? shop.data.privacyPolicyUrl : null;
+
   return (
     <Screen edges={SCREEN_EDGES}>
       <Stack.Screen options={{ title: step === 'code' ? 'Verify your email' : 'Create account' }} />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.intro}>
-            <AppText variant="title" accessibilityRole="header">Join DoorKart</AppText>
-            <AppText color="textSecondary">Keep your profile, addresses and new orders on your account. You can add a delivery address later.</AppText>
-          </View>
-
           {!config.registration.enabled ? (
-            <SectionCard title="Registration is unavailable">
+            <View style={cardStyle}>
+              <AppText variant="heading">Registration is unavailable</AppText>
               <AppText color="textSecondary">Email registration is not available right now. You can use another enabled sign-in method or continue shopping as a guest.</AppText>
               <PrimaryButton title="Back to sign in" variant="secondary" onPress={goToLogin} />
-            </SectionCard>
+            </View>
           ) : step === 'created' ? (
-            <SectionCard title="Account created">
-              <AppText color="textSecondary">Your account was created. Sign in with an email code to verify your email and access your account.</AppText>
+            <View style={cardStyle}>
+              <View style={[styles.doneIcon, { backgroundColor: theme.primarySoft }]}>
+                <Icon name="success" size={32} color="primary" />
+              </View>
+              <AppText variant="heading" style={styles.centerText}>Account created</AppText>
+              <AppText color="textSecondary" style={styles.centerText}>Sign in with an email code to verify your email and open your account.</AppText>
               <PrimaryButton title="Sign in with an email code" onPress={goToLogin} />
-            </SectionCard>
+            </View>
           ) : step === 'code' ? (
-            <SectionCard title="Verify your email">
-              <AppText color="textSecondary">We sent a 6-digit code to {submitted?.email}. Check your inbox and spam folder.</AppText>
-              <AppText variant="caption" color={timers.secondsToExpiry > 0 ? 'textSecondary' : 'danger'}>
-                {timers.secondsToExpiry > 0 ? `Your code expires in ${timers.secondsToExpiry}s.` : 'This code has expired. Request a new code.'}
-              </AppText>
-              <FormField
-                label="6-digit code"
-                value={code}
-                onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 6))}
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                maxLength={6}
-                editable={!isBusy}
-                error={error ?? undefined}
-                onSubmitEditing={verify}
-                returnKeyType="done"
-              />
-              {failedAttempts >= config.otp.maxAttempts ? <AppText color="danger" accessibilityRole="alert">The attempt limit has been reached. Request a new code.</AppText> : null}
-              <PrimaryButton title="Verify and create account" loading={isBusy} disabled={timers.secondsToExpiry <= 0 || failedAttempts >= config.otp.maxAttempts} onPress={verify} />
-              <PrimaryButton
-                title={timers.secondsToResend > 0 ? `Resend code in ${timers.secondsToResend}s` : 'Send a new code'}
-                variant="secondary"
-                disabled={isBusy || timers.secondsToResend > 0}
-                onPress={sendRegistration}
-              />
-              <PrimaryButton title="Edit registration details" variant="secondary" disabled={isBusy} onPress={() => { setStep('profile'); setCode(''); setError(null); timers.reset(); }} />
-            </SectionCard>
+            <>
+              {config.registration.verificationRequired ? <AppText variant="captionStrong" color="primary" style={styles.centerText}>Step 2 of 2</AppText> : null}
+              <View style={cardStyle}>
+                <VerifyCodePanel
+                  email={submitted?.email ?? ''}
+                  code={code}
+                  onCodeChange={(value) => {
+                    setCode(value);
+                    if (error) setError(null);
+                  }}
+                  onVerify={verify}
+                  onResend={sendRegistration}
+                  onChangeEmail={() => { setStep('profile'); setCode(''); setError(null); timers.reset(); }}
+                  changeEmailLabel="Edit details"
+                  verifyLabel="Verify and create account"
+                  secondsToExpiry={timers.secondsToExpiry}
+                  secondsToResend={timers.secondsToResend}
+                  error={error}
+                  isBusy={isBusy}
+                  attemptsExhausted={failedAttempts >= config.otp.maxAttempts}
+                />
+              </View>
+            </>
           ) : (
             <>
-              <SectionCard title="Your details">
-                <FormField label="Full name" value={fullName} onChangeText={setFullName} autoComplete="name" textContentType="name" autoCapitalize="words" maxLength={100} editable={!isBusy} error={errors.fullName} />
-                <FormField label="Mobile number with country code" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" maxLength={30} editable={!isBusy} error={errors.mobile} />
-                <AppText variant="caption" color="textSecondary">Include your country code. This number is saved as contact information; it is not verified by SMS.</AppText>
-                <FormField label="Email address" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" autoCapitalize="none" autoCorrect={false} maxLength={200} editable={!isBusy} error={errors.email} />
-              </SectionCard>
-              <SectionCard title="Delivery address">
-                <View style={styles.row}>
-                  <AppText style={styles.rowLabel}>Add a delivery address after signup</AppText>
-                  <Switch value={addAddress} onValueChange={setAddAddress} disabled={isBusy} accessibilityLabel="Add a delivery address after signup" />
+              <AuthHeader
+                eyebrow={config.registration.verificationRequired ? 'Step 1 of 2' : undefined}
+                title="Create your account"
+                subtitle="Track orders, save addresses and check out faster."
+                showCartNote={isCheckoutNext(next)}
+              />
+
+              <View style={cardStyle}>
+                <FormField
+                  label="Full name"
+                  placeholder="e.g. Priya Sharma"
+                  value={fullName}
+                  onChangeText={(value) => { setFullName(value); clearFieldError('fullName'); }}
+                  autoComplete="name"
+                  textContentType="name"
+                  autoCapitalize="words"
+                  maxLength={100}
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  onSubmitEditing={() => mobileInput.current?.focus()}
+                  editable={!isBusy}
+                  error={errors.fullName}
+                />
+                <FormField
+                  ref={mobileInput}
+                  label="Mobile number"
+                  prefix={MOBILE_PREFIX}
+                  placeholder="98765 43210"
+                  value={mobileDigits}
+                  onChangeText={(value) => { setMobileDigits(value.replace(/\D/g, '').slice(0, MOBILE_DIGITS)); clearFieldError('mobile'); }}
+                  keyboardType="phone-pad"
+                  autoComplete="tel-national"
+                  textContentType="telephoneNumber"
+                  maxLength={MOBILE_DIGITS}
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  onSubmitEditing={() => emailInput.current?.focus()}
+                  editable={!isBusy}
+                  error={errors.mobile}
+                  hint="So we can call you about your delivery."
+                />
+                <FormField
+                  ref={emailInput}
+                  label="Email address"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChangeText={(value) => { setEmail(value); clearFieldError('email'); }}
+                  keyboardType="email-address"
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  maxLength={200}
+                  returnKeyType="done"
+                  editable={!isBusy}
+                  error={errors.email}
+                  hint={config.registration.verificationRequired ? 'We’ll send a code here to verify it.' : undefined}
+                />
+
+                <View style={[styles.optionRow, { borderColor: theme.border }]}>
+                  <View style={styles.optionText}>
+                    <AppText variant="bodyStrong">Add a delivery address next</AppText>
+                    <AppText variant="caption" color="textSecondary">Optional. You can also add one at checkout.</AppText>
+                  </View>
+                  <Switch
+                    value={addAddress}
+                    onValueChange={setAddAddress}
+                    disabled={isBusy}
+                    trackColor={{ true: theme.primary, false: theme.border }}
+                    accessibilityLabel="Add a delivery address after signup"
+                  />
                 </View>
-                <AppText variant="caption" color="textSecondary">Optional. You can also add an address during checkout.</AppText>
-              </SectionCard>
+              </View>
+
               <View style={styles.block}>
                 <Pressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: termsAccepted, disabled: isBusy }}
                   accessibilityLabel="I agree to the Terms of Service and Privacy Policy"
                   disabled={isBusy}
-                  onPress={() => setTermsAccepted((current) => !current)}
-                  style={styles.row}>
-                  <View style={[styles.checkbox, { borderColor: theme.primary, backgroundColor: termsAccepted ? theme.primary : theme.surface }]}>
-                    {termsAccepted ? <AppText color="textOnPrimary">✓</AppText> : null}
+                  onPress={() => { setTermsAccepted((current) => !current); clearFieldError('termsAccepted'); }}
+                  style={styles.termsRow}>
+                  <View style={[styles.checkbox, { borderColor: errors.termsAccepted ? theme.danger : theme.primary, backgroundColor: termsAccepted ? theme.primary : theme.surface }]}>
+                    {termsAccepted ? <AppText variant="captionStrong" color="textOnPrimary">✓</AppText> : null}
                   </View>
-                  <AppText style={styles.rowLabel}>I agree to the Terms of Service and Privacy Policy.</AppText>
+                  <AppText variant="caption" style={styles.optionText}>
+                    I agree to the{' '}
+                    {termsUrl ? <AppText variant="captionStrong" color="primary" accessibilityRole="link" onPress={() => openPolicy(termsUrl)}>Terms of Service</AppText> : 'Terms of Service'}
+                    {' '}and{' '}
+                    {privacyUrl ? <AppText variant="captionStrong" color="primary" accessibilityRole="link" onPress={() => openPolicy(privacyUrl)}>Privacy Policy</AppText> : 'Privacy Policy'}.
+                  </AppText>
                 </Pressable>
                 {errors.termsAccepted ? <AppText variant="caption" color="danger" accessibilityRole="alert">{errors.termsAccepted}</AppText> : null}
-                {shop.status === 'success' ? (
-                  <View style={styles.links}>
-                    {shop.data.termsUrl ? <PrimaryButton title="Terms of Service" size="small" variant="secondary" onPress={() => openPolicy(shop.data.termsUrl ?? '')} /> : null}
-                    {shop.data.privacyPolicyUrl ? <PrimaryButton title="Privacy Policy" size="small" variant="secondary" onPress={() => openPolicy(shop.data.privacyPolicyUrl ?? '')} /> : null}
-                  </View>
-                ) : null}
                 {error ? <AppText color="danger" accessibilityRole="alert">{error}</AppText> : null}
-                <AppText variant="caption" color="textSecondary">
-                  {config.registration.verificationRequired ? 'Verify your email code to complete registration. No password is required.' : 'Registration creates an account. Email-code verification is still required before you can sign in.'}
-                </AppText>
-                <PrimaryButton title={config.registration.verificationRequired ? 'Create account and send code' : 'Create account'} loading={isBusy} onPress={sendRegistration} />
-                <PrimaryButton title="Already have an account? Sign in" variant="secondary" disabled={isBusy} onPress={goToLogin} />
+                <PrimaryButton title={config.registration.verificationRequired ? 'Continue' : 'Create account'} loading={isBusy} onPress={sendRegistration} />
+                {!config.registration.verificationRequired ? (
+                  <AppText variant="caption" color="textSecondary" style={styles.centerText}>You’ll verify your email with a sign-in code afterwards.</AppText>
+                ) : null}
+                <View style={styles.signinRow}>
+                  <AppText color="textSecondary">Already have an account?</AppText>
+                  <TextLink title="Sign in" disabled={isBusy} onPress={goToLogin} />
+                </View>
               </View>
             </>
           )}
@@ -257,11 +335,32 @@ function RegistrationForm({ config }: { config: AuthConfig }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { padding: Spacing.three, gap: Spacing.three },
-  intro: { gap: Spacing.two, paddingVertical: Spacing.two },
+  content: {
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    padding: Spacing.four,
+    paddingBottom: Spacing.five,
+    gap: Spacing.four,
+  },
+  card: {
+    padding: Spacing.four,
+    gap: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.large,
+  },
   block: { gap: Spacing.three },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, minHeight: MinTouchTarget },
-  rowLabel: { flex: 1 },
-  checkbox: { width: 24, height: 24, borderWidth: 1, borderRadius: Radius.small, alignItems: 'center', justifyContent: 'center' },
-  links: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  centerText: { textAlign: 'center' },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingTop: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  optionText: { flex: 1 },
+  termsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, minHeight: MinTouchTarget },
+  checkbox: { width: 24, height: 24, borderWidth: 2, borderRadius: Radius.small, alignItems: 'center', justifyContent: 'center' },
+  signinRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' },
+  doneIcon: { width: 64, height: 64, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
 });

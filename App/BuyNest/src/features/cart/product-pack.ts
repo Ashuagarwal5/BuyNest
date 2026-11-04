@@ -7,7 +7,7 @@ export function selectProductPack(product:Product, variantId?:string):Product {
   if (!variantId) return product;
   const variant=product.variants?.find(v=>v.id===variantId);
   if (!variant) return {...product,variantId,stockQuantity:0};
-  return {...product,variantId,baseName:product.name,name:`${product.name} - ${variant.label}`,packLabel:variant.label,unitsPerPack:variant.unitsPerPack,physicalStockQuantity:product.stockQuantity,mrp:variant.mrp,sellingPrice:variant.sellingPrice,stockQuantity:variant.availableQuantity};
+  return {...product,variantId,baseName:product.name,name:`${product.name} - ${variant.label}`,packLabel:variant.label,unitsPerPack:variant.unitsPerPack,physicalStockQuantity:product.stockQuantity,mrp:variant.mrp,sellingPrice:variant.sellingPrice,stockQuantity:variant.availableQuantity,readyQuantity:variant.readyQuantity};
 }
 
 type Entry = {product:Product;quantity:number};
